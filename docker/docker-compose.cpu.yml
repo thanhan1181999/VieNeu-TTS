@@ -1,0 +1,33 @@
+
+services:
+  vieneu-cpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cpu
+
+    platform: linux/amd64
+
+    container_name: vieneu-tts-cpu
+
+    working_dir: /workspace
+
+    volumes:
+      - ..:/workspace
+      - huggingface_cache:/root/.cache/huggingface
+      - uv_cache:/root/.cache/uv
+
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      PYTHONUNBUFFERED: "1"
+      PHONEMIZER_ESPEAK_LIBRARY: /usr/lib/x86_64-linux-gnu/libespeak-ng.so.1
+
+      # CPU thread control
+      OMP_NUM_THREADS: "4"
+      MKL_NUM_THREADS: "4"
+
+    stdin_open: true
+    tty: true
+
+volumes:
+  huggingface_cache:
+  uv_cache:

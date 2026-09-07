@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import time
 from pathlib import Path
 from typing import Any
@@ -20,18 +19,20 @@ from vieneu.v3turbo import (
 
 
 # ============================================================
-# Configuration
+# CONFIG
 # ============================================================
 
 DEFAULT_BATCH_SIZE = 8
 CACHE_VERSION = 1
-SENTENCE_GAP_SECONDS = 0.12
-
 DEFAULT_STORY_ROOT = Path("stories")
+
+# Chunk tối đa.
+# VieNeu mặc định cũng dùng 256.
+MAX_CHARS = 512
 
 
 # ============================================================
-# Utilities
+# UTILS
 # ============================================================
 
 def natural_key(path: Path):
@@ -40,129 +41,64 @@ def natural_key(path: Path):
         001.txt
         002.txt
         010.txt
-        011.txt
-
-    instead of:
+        100.txt
+    thay vì:
         001.txt
         010.txt
-        011.txt
+        100.txt
         002.txt
     """
+    import re
+
     return [
-        int(part) if part.isdigit() else part.lower()
-        for part in re.split(r"(\d+)", path.name)
+        int(x) if x.isdigit() else x.lower()
+        for x in re.split(r"(\d+)", path.name)
     ]
 
 
-def load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+def load_json(path: Path, default=None):
+    if not path.exists():
+        return default
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
 
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def split_sentences(text: str) -> list[str]:
+# ============================================================
+# REFERENCE CACHE
+# ============================================================
+
+def fingerprint_file(path: Path) -> dict[str, Any]:
     """
-    Split a script segment into sentences while preserving sentence text.
+    Tạo fingerprint nhẹ cho reference.wav.
 
-    Vietnamese narration is normally sentence-based, so sentence boundaries
-    are used as the unit for accurate subtitle timing.
+    Chỉ dùng stat + hash một phần file để phát hiện reference
+    thay đổi mà không cần hash toàn bộ file.
     """
-    text = text.strip()
-    if not text:
-        return []
+    stat = path.stat()
 
-    text = re.sub(r"\s+", " ", text)
-
-    sentences = re.split(r"(?<=[.!?…])\s+", text)
-
-    return [
-        sentence.strip()
-        for sentence in sentences
-        if sentence.strip()
-    ]
-
-
-def combine_sentence_audio(
-    sentence_audios: list[np.ndarray],
-    sample_rate: int,
-    gap_seconds: float = SENTENCE_GAP_SECONDS,
-) -> tuple[np.ndarray, list[dict[str, float]]]:
-    """
-    Join sentence audio and return real sentence-level timestamps.
-
-    The timestamps are measured from the actual generated audio duration,
-    not estimated from text length or from the total segment duration.
-    """
-    if not sentence_audios:
-        return np.array([], dtype=np.float32), []
-
-    gap_samples = int(sample_rate * gap_seconds)
-    silence = np.zeros(gap_samples, dtype=np.float32)
-
-    parts: list[np.ndarray] = []
-    timings: list[dict[str, float]] = []
-
-    current_time = 0.0
-
-    for index, audio in enumerate(sentence_audios):
-        audio = np.asarray(audio, dtype=np.float32)
-
-        duration = len(audio) / sample_rate
-        start = current_time
-        end = start + duration
-
-        timings.append(
-            {
-                "index": index + 1,
-                "start": round(start, 3),
-                "end": round(end, 3),
-                "duration": round(duration, 3),
-            }
-        )
-
-        parts.append(audio)
-        current_time = end
-
-        if index < len(sentence_audios) - 1:
-            parts.append(silence)
-            current_time += gap_seconds
-
-    combined = np.concatenate(parts)
-
-    return combined, timings
-
-
-def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8").strip()
-
-
-def fingerprint_file(path: Path) -> str:
-    """
-    SHA-256 fingerprint of the reference audio.
-
-    If reference.wav changes, the cached speaker embedding/reference
-    codes will automatically be regenerated.
-    """
     h = hashlib.sha256()
 
     with path.open("rb") as f:
-        while True:
-            chunk = f.read(1024 * 1024)
+        first = f.read(1024 * 1024)
+        h.update(first)
 
-            if not chunk:
-                break
+        if stat.st_size > 1024 * 1024:
+            f.seek(max(0, stat.st_size - 1024 * 1024))
+            h.update(f.read(1024 * 1024))
 
-            h.update(chunk)
+    return {
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256_partial": h.hexdigest(),
+    }
 
-    return h.hexdigest()
-
-
-# ============================================================
-# Reference cache
-# ============================================================
 
 def cache_path_for_story(story_dir: Path) -> Path:
     return story_dir / "cache" / "reference.npz"
@@ -171,40 +107,45 @@ def cache_path_for_story(story_dir: Path) -> Path:
 def load_reference_cache(
     cache_path: Path,
     reference_path: Path,
-) -> tuple[np.ndarray, np.ndarray] | None:
+):
     """
-    Load cached speaker_emb + ref_codes.
+    Load cached:
+        speaker_emb
+        ref_codes
 
-    Cache is valid only when:
-        - cache version matches
-        - reference.wav fingerprint matches
+    Trả về None nếu cache không tồn tại hoặc reference đã thay đổi.
     """
+
     if not cache_path.exists():
         return None
-
-    reference_fingerprint = fingerprint_file(reference_path)
 
     try:
         data = np.load(cache_path, allow_pickle=False)
 
-        version = int(data["cache_version"])
-        cached_fingerprint = str(data["reference_fingerprint"])
+        cached_fingerprint = json.loads(
+            str(data["fingerprint"])
+        )
 
-        if version != CACHE_VERSION:
-            print("  Reference cache: INVALID (version mismatch)")
+        current_fingerprint = fingerprint_file(reference_path)
+
+        if cached_fingerprint != current_fingerprint:
+            print("Reference cache: MISS (reference changed)")
             return None
 
-        if cached_fingerprint != reference_fingerprint:
-            print("  Reference cache: INVALID (reference.wav changed)")
-            return None
+        speaker_emb = np.asarray(
+            data["speaker_emb"],
+            dtype=np.float32,
+        )
 
-        speaker_emb = data["speaker_emb"]
-        ref_codes = data["ref_codes"]
+        ref_codes = np.asarray(
+            data["ref_codes"],
+            dtype=np.int64,
+        )
 
         return speaker_emb, ref_codes
 
-    except Exception as exc:
-        print(f"  Reference cache: INVALID ({exc})")
+    except Exception as e:
+        print(f"Reference cache: INVALID ({e})")
         return None
 
 
@@ -213,17 +154,31 @@ def save_reference_cache(
     reference_path: Path,
     speaker_emb: np.ndarray,
     ref_codes: np.ndarray,
-) -> None:
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+):
+    cache_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    reference_fingerprint = fingerprint_file(reference_path)
+    fingerprint = fingerprint_file(reference_path)
 
-    np.savez(
+    np.savez_compressed(
         cache_path,
-        cache_version=np.array(CACHE_VERSION, dtype=np.int64),
-        reference_fingerprint=np.array(reference_fingerprint),
-        speaker_emb=speaker_emb,
-        ref_codes=ref_codes,
+        cache_version=np.array(CACHE_VERSION),
+        fingerprint=np.array(
+            json.dumps(
+                fingerprint,
+                ensure_ascii=False,
+            )
+        ),
+        speaker_emb=np.asarray(
+            speaker_emb,
+            dtype=np.float32,
+        ),
+        ref_codes=np.asarray(
+            ref_codes,
+            dtype=np.int64,
+        ),
     )
 
 
@@ -231,10 +186,11 @@ def get_reference(
     tts: Vieneu,
     story_dir: Path,
     reference_path: Path,
-) -> tuple[np.ndarray, np.ndarray]:
+):
     """
-    Load reference from cache or encode it once.
+    Load reference từ cache hoặc encode một lần.
     """
+
     cache_path = cache_path_for_story(story_dir)
 
     cached = load_reference_cache(
@@ -243,13 +199,15 @@ def get_reference(
     )
 
     if cached is not None:
+        print("Reference cache: HIT")
+
         speaker_emb, ref_codes = cached
 
-        print("Reference cache: HIT")
         print(
             f"    speaker_emb: {speaker_emb.shape} "
             f"{speaker_emb.dtype}"
         )
+
         print(
             f"    ref_codes: {ref_codes.shape} "
             f"{ref_codes.dtype}"
@@ -258,25 +216,21 @@ def get_reference(
         return speaker_emb, ref_codes
 
     print("Reference cache: MISS")
-    print("  Encoding reference.wav...")
-
-    started = time.perf_counter()
+    print("    Encoding reference...")
 
     speaker_emb, ref_codes = tts.encode_reference(
         reference_path,
         denoise=True,
     )
 
-    elapsed = time.perf_counter() - started
-
-    print(f"  Reference encoded in {elapsed:.2f}s")
-    print(
-        f"    speaker_emb: {speaker_emb.shape} "
-        f"{speaker_emb.dtype}"
+    speaker_emb = np.asarray(
+        speaker_emb,
+        dtype=np.float32,
     )
-    print(
-        f"    ref_codes: {ref_codes.shape} "
-        f"{ref_codes.dtype}"
+
+    ref_codes = np.asarray(
+        ref_codes,
+        dtype=np.int64,
     )
 
     save_reference_cache(
@@ -286,72 +240,98 @@ def get_reference(
         ref_codes,
     )
 
-    print(f"  Reference cache: SAVED -> {cache_path}")
+    print("    Reference cache: SAVED")
+
+    print(
+        f"    speaker_emb: {speaker_emb.shape} "
+        f"{speaker_emb.dtype}"
+    )
+
+    print(
+        f"    ref_codes: {ref_codes.shape} "
+        f"{ref_codes.dtype}"
+    )
 
     return speaker_emb, ref_codes
 
 
 # ============================================================
-# Audio generation
+# FAST TTS
 # ============================================================
 
-def generate_single(
-    tts: Vieneu,
+def generate_segment_fast(
+    tts,
     text: str,
-    output_path: Path,
-    speaker_emb: np.ndarray,
-    ref_codes: np.ndarray,
-    style: str,
-) -> None:
-    """
-    Generate one text using already-encoded reference data.
-    """
-    audio = tts.engine.infer(
-        text=text,
-        speaker_emb=speaker_emb,
-        ref_codes=ref_codes,
-        style=style,
-        use_ref_codes=True,
-    )
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    tts.save(audio, output_path)
-
-
-def generate_batch_cached(
-    tts: Vieneu,
-    script_paths: list[Path],
-    texts: list[str],
-    output_paths: list[Path],
-    speaker_emb: np.ndarray,
-    ref_codes: np.ndarray,
+    speaker_emb,
+    ref_codes,
     style: str,
     batch_size: int,
-) -> dict[str, list[dict[str, Any]]]:
+    max_chars: int = MAX_CHARS,
+):
     """
-    Generate multiple story segments while keeping sentence-level timing.
+    FAST MODE.
 
-    Each .txt is split into sentences. Sentences are synthesized separately,
-    joined back into their segment, and the real generated duration of each
-    sentence is recorded.
+    Không split sentence.
 
-    Returns:
-        {
-            "001": [
-                {
-                    "index": 1,
-                    "text": "...",
-                    "start": 0.0,
-                    "end": 2.31,
-                    "duration": 2.31
-                },
-                ...
-            ]
-        }
+    Toàn bộ text được đưa thẳng vào:
+        normalize_to_chunks_v3_with_gaps()
+
+    Hàm này tự ưu tiên:
+        - paragraph boundary
+        - sentence boundary
+        - phrase boundary
+
+    và chỉ cắt bên trong câu khi thực sự không thể
+    giữ câu trong giới hạn max_chars.
+
+    Sau đó:
+
+        all chunks
+             ↓
+        _infer_chunks()  <-- chỉ gọi interface 1 lần
+             ↓
+        join_audio_chunks()
+             ↓
+        watermark 1 lần
     """
-    if not texts:
-        return {}
+
+    text = text.strip()
+
+    if not text:
+        return np.array([], dtype=np.float32), 0, 0
+
+    # ========================================================
+    # 1. CHUNK TOÀN BỘ TEXT
+    # ========================================================
+
+    chunks, gaps = normalize_to_chunks_v3_with_gaps(
+        text,
+        max_chars=max_chars,
+    )
+
+    if not chunks:
+        return np.array([], dtype=np.float32), 0, 0
+
+    total_chars = len(text)
+
+    avg_chars = (
+        total_chars / len(chunks)
+        if chunks
+        else 0
+    )
+
+    print(
+        f"    Chars : {total_chars:,}"
+    )
+
+    print(
+        f"    Chunks: {len(chunks)} "
+        f"(avg {avg_chars:.1f} chars/chunk)"
+    )
+
+    # ========================================================
+    # 2. INFERENCE
+    # ========================================================
 
     sampling = dict(
         temperature=0.8,
@@ -362,547 +342,482 @@ def generate_batch_cached(
         repetition_window=DEFAULT_REP_WINDOW,
     )
 
-    # --------------------------------------------------------
-    # Split every segment into sentences
-    # --------------------------------------------------------
-    segment_sentences: list[list[str]] = []
-    flat_sentences: list[str] = []
-    sentence_owner: list[int] = []
+    infer_start = time.perf_counter()
 
-    for segment_index, text in enumerate(texts):
-        sentences = split_sentences(text)
-        segment_sentences.append(sentences)
+    # ========================================================
+    # QUAN TRỌNG
+    #
+    # Chỉ gọi _infer_chunks() MỘT LẦN cho toàn bộ segment.
+    #
+    # CPU/ONNX bên trong VieNeu vẫn chạy từng chunk tuần tự,
+    # nhưng generate.py không gọi API/interface riêng cho từng
+    # chunk nữa.
+    # ========================================================
 
-        for sentence in sentences:
-            flat_sentences.append(sentence)
-            sentence_owner.append(segment_index)
+    # VieNeu-TTS v3 Turbo has had two _infer_chunks signatures:
+    #
+    #   newer: (chunks, speaker_emb, ref_codes, style, use_ref_codes,
+    #            batch_size, sampling)
+    #   older: (chunks, speaker_emb, ref_codes, style, use_ref_codes,
+    #            sampling)
+    #
+    # CPU/ONNX does not benefit from chunk batching anyway, so support both
+    # signatures without changing the inference behavior.
+    import inspect
 
-    if not flat_sentences:
-        empty = np.array([], dtype=np.float32)
+    infer_chunks_fn = tts._infer_chunks
+    infer_params = inspect.signature(infer_chunks_fn).parameters
 
-        for output_path in output_paths:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            tts.save(empty, output_path)
+    if "batch_size" in infer_params:
+        wavs = infer_chunks_fn(
+            chunks,
+            speaker_emb,
+            ref_codes,
+            # style,
+            True,
+            max(1, int(batch_size)),
+            sampling,
+        )
+    else:
+        wavs = infer_chunks_fn(
+            chunks,
+            speaker_emb,
+            ref_codes,
+            # style,
+            True,
+            sampling,
+        )
 
-        return {
-            path.stem: []
-            for path in script_paths
-        }
+    infer_time = time.perf_counter() - infer_start
 
-    print(
-        f"  Sentences: {len(flat_sentences)} "
-        f"across {len(texts)} segment(s)"
+    # ========================================================
+    # 3. JOIN AUDIO
+    # ========================================================
+
+    combined_audio = join_audio_chunks(
+        wavs,
+        tts.sample_rate,
+        silence_ps=gaps_to_silence(gaps),
     )
 
-    # --------------------------------------------------------
-    # Normalize every sentence into VieNeu chunks.
+    # ========================================================
+    # 4. WATERMARK
     #
-    # Chunk ownership is tracked so we can reconstruct:
-    #
-    #     chunks -> sentence -> segment
-    #
-    # while keeping the real duration of each sentence.
-    # --------------------------------------------------------
-    per_sentence_gaps: list[Any] = []
-    flat_chunks: list[str] = []
-    chunk_owner: list[int] = []
+    # Chỉ watermark MỘT LẦN cho toàn bộ segment.
+    # ========================================================
 
-    for sentence_index, sentence in enumerate(flat_sentences):
-        chunks, gaps = normalize_to_chunks_v3_with_gaps(
-            sentence,
-            max_chars=256,
-        )
-
-        per_sentence_gaps.append(gaps)
-
-        for chunk in chunks:
-            flat_chunks.append(chunk)
-            chunk_owner.append(sentence_index)
-
-    empty = np.array([], dtype=np.float32)
-
-    if not flat_chunks:
-        return {
-            path.stem: []
-            for path in script_paths
-        }
-
-    # --------------------------------------------------------
-    # Direct cached-reference inference
-    # --------------------------------------------------------
-    flat_wavs = tts._infer_chunks(
-        flat_chunks,
-        speaker_emb,
-        ref_codes,
-        True,
-        max(1, int(batch_size)),
-        sampling,
+    combined_audio = tts._apply_watermark(
+        combined_audio
     )
 
-    # --------------------------------------------------------
-    # Group generated chunks back to sentences
-    # --------------------------------------------------------
-    sentence_chunks: list[list[np.ndarray]] = [
-        []
-        for _ in flat_sentences
-    ]
-
-    for wav, sentence_index in zip(flat_wavs, chunk_owner):
-        sentence_chunks[sentence_index].append(wav)
-
-    # --------------------------------------------------------
-    # Join chunks belonging to each sentence.
-    #
-    # IMPORTANT:
-    # Do NOT watermark here. Watermark is applied exactly once
-    # after the whole segment has been assembled.
-    # --------------------------------------------------------
-    sentence_audios: list[np.ndarray] = []
-
-    for sentence_index, chunks in enumerate(sentence_chunks):
-        if not chunks:
-            audio = empty
-        else:
-            audio = join_audio_chunks(
-                chunks,
-                tts.sample_rate,
-                silence_ps=gaps_to_silence(
-                    per_sentence_gaps[sentence_index]
-                ),
-            )
-
-        sentence_audios.append(audio)
-
-    # --------------------------------------------------------
-    # Reconstruct each segment and save real sentence timings.
-    # --------------------------------------------------------
-    segment_metadata: dict[str, list[dict[str, Any]]] = {}
-    sentence_cursor = 0
-
-    for script_path, sentences, output_path in zip(
-        script_paths,
-        segment_sentences,
-        output_paths,
-    ):
-        audios = sentence_audios[
-            sentence_cursor:
-            sentence_cursor + len(sentences)
-        ]
-
-        sentence_cursor += len(sentences)
-
-        combined_audio, timings = combine_sentence_audio(
-            audios,
-            tts.sample_rate,
-        )
-
-        # Watermark exactly once per final segment.
-        combined_audio = tts._apply_watermark(combined_audio)
-
-        metadata_items: list[dict[str, Any]] = []
-
-        for sentence, timing in zip(sentences, timings):
-            metadata_items.append(
-                {
-                    "index": timing["index"],
-                    "text": sentence,
-                    "start": timing["start"],
-                    "end": timing["end"],
-                    "duration": timing["duration"],
-                }
-            )
-
-        segment_metadata[script_path.stem] = metadata_items
-
-        output_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        tts.save(
-            combined_audio,
-            output_path,
-        )
-
-    return segment_metadata
+    return (
+        combined_audio,
+        len(chunks),
+        infer_time,
+    )
 
 
 # ============================================================
-# Story generation
+# STORY GENERATION
 # ============================================================
 
 def generate_story(
     story_dir: Path,
     force: bool = False,
     batch_size: int = DEFAULT_BATCH_SIZE,
-) -> None:
-    started_total = time.perf_counter()
+    only: list[str] | None = None,
+    max_chars_override: int | None = None,
+):
+    story_dir = story_dir.resolve()
 
     config_path = story_dir / "config.json"
 
-    if not config_path.exists():
-        raise FileNotFoundError(
-            f"Missing config.json: {config_path}"
-        )
-
-    config = load_json(config_path)
+    config = load_json(
+        config_path,
+        {},
+    )
 
     # --------------------------------------------------------
     # Paths
     # --------------------------------------------------------
+
     voice_path = story_dir / config.get(
         "voice",
         "voice/reference.wav",
     )
 
-    script_dir = story_dir / "script"
-    audio_dir = story_dir / "audio"
-    output_dir = story_dir / "output"
-    timings_path = output_dir / "timings.json"
+    script_dir = story_dir / config.get(
+        "script_dir",
+        "script",
+    )
 
-    if not voice_path.exists():
-        raise FileNotFoundError(
-            f"Missing reference voice: {voice_path}"
-        )
+    audio_dir = story_dir / config.get(
+        "audio_dir",
+        "audio",
+    )
 
-    if not script_dir.exists():
-        raise FileNotFoundError(
-            f"Missing script directory: {script_dir}"
-        )
+    audio_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    # --------------------------------------------------------
-    # Style
-    # --------------------------------------------------------
     style = config.get(
         "style",
         "doc_truyen",
     )
 
-    # --------------------------------------------------------
-    # Script files
-    # --------------------------------------------------------
-    script_files = sorted(
-        script_dir.glob("*.txt"),
-        key=natural_key,
+    max_chars = int(
+        max_chars_override
+        if max_chars_override is not None
+        else config.get(
+            "max_chars",
+            MAX_CHARS,
+        )
     )
 
-    if not script_files:
-        print(f"No .txt files found in {script_dir}")
-        return
-
     # --------------------------------------------------------
-    # Statistics
+    # Banner
     # --------------------------------------------------------
-    generated = 0
-    skipped = 0
-    failed = 0
 
-    # Keep existing timings so a later run with skipped files
-    # never destroys their metadata.
-    all_metadata: dict[str, list[dict[str, Any]]] = {}
-
-    if timings_path.exists():
-        try:
-            existing_metadata = load_json(timings_path)
-
-            if isinstance(existing_metadata, dict):
-                all_metadata.update(existing_metadata)
-
-                print(
-                    f"Timings cache: HIT -> {timings_path}"
-                )
-
-        except Exception as exc:
-            print(
-                f"Timings cache: INVALID ({exc})"
-            )
-
-    # --------------------------------------------------------
-    # Initialize model
-    # --------------------------------------------------------
     print()
     print("=" * 60)
-    print(f"Story: {story_dir}")
+    print()
+    print(f"Story: {story_dir.relative_to(Path.cwd())}")
+    print()
     print("=" * 60)
+    print()
 
     print(f"Voice : {voice_path}")
     print(f"Style : {style}")
     print(f"Batch : {batch_size}")
-    print(f"Texts : {len(script_files)}")
+    print(f"Max chars/chunk : {max_chars}")
     print()
+
+    # --------------------------------------------------------
+    # Validate
+    # --------------------------------------------------------
+
+    if not voice_path.exists():
+        raise FileNotFoundError(
+            f"Reference voice not found: {voice_path}"
+        )
+
+    if not script_dir.exists():
+        raise FileNotFoundError(
+            f"Script directory not found: {script_dir}"
+        )
+
+    text_files = sorted(
+        script_dir.glob("*.txt"),
+        key=natural_key,
+    )
+
+    if only:
+        wanted = {Path(name).stem for name in only}
+        text_files = [
+            p for p in text_files
+            if p.stem in wanted
+        ]
+
+    if not text_files:
+        print("No matching .txt files found.")
+        return
+
+    print(f"Texts : {len(text_files)}")
+    print()
+
+    # --------------------------------------------------------
+    # Init TTS
+    # --------------------------------------------------------
+
+    print("Loading VieNeu...")
 
     tts = Vieneu(
         mode="v3turbo",
         device="auto",
         backend="auto",
         threads=0,
-        max_batch_size=max(batch_size, 1),
+        max_batch_size=max(
+            batch_size,
+            1,
+        ),
     )
 
-    try:
-        # ----------------------------------------------------
-        # Load / create reference cache
-        # ----------------------------------------------------
-        speaker_emb, ref_codes = get_reference(
-            tts,
-            story_dir,
-            voice_path,
+    print(
+        f"Backend: {getattr(tts, 'backend', 'unknown')}"
+    )
+
+    print()
+
+    # --------------------------------------------------------
+    # Reference
+    # --------------------------------------------------------
+
+    speaker_emb, ref_codes = get_reference(
+        tts,
+        story_dir,
+        voice_path,
+    )
+
+    print()
+
+    # --------------------------------------------------------
+    # Build pending list
+    # --------------------------------------------------------
+
+    pending = []
+
+    skipped = 0
+
+    for text_path in text_files:
+
+        stem = text_path.stem
+
+        audio_path = (
+            audio_dir /
+            f"{stem}.wav"
         )
 
-        print()
+        if (
+            audio_path.exists()
+            and not force
+        ):
+            skipped += 1
+            continue
 
-        # ----------------------------------------------------
-        # Determine which files actually need generation
-        # ----------------------------------------------------
-        pending_scripts: list[Path] = []
-        pending_texts: list[str] = []
-        pending_outputs: list[Path] = []
+        pending.append(
+            {
+                "stem": stem,
+                "text_path": text_path,
+                "audio_path": audio_path,
+            }
+        )
 
-        for script_path in script_files:
-            output_path = (
-                audio_dir /
-                f"{script_path.stem}.wav"
-            )
+    print(
+        f"Generating {len(pending)} segment(s)..."
+    )
 
-            if output_path.exists() and not force:
-                skipped += 1
+    if skipped:
+        print(
+            f"Skipped existing: {skipped}"
+        )
 
-                print(
-                    f"[SKIP] {script_path.name} "
-                    f"-> {output_path.name}"
-                )
+    print()
 
-                continue
+    if not pending:
+        print("Nothing to generate.")
+        return
 
-            text = read_text(script_path)
+    # --------------------------------------------------------
+    # Generate
+    # --------------------------------------------------------
 
-            if not text:
-                failed += 1
+    total_start = time.perf_counter()
 
-                print(
-                    f"[FAIL] {script_path.name}: "
-                    f"empty text"
-                )
+    generated = 0
+    failed = 0
 
-                continue
+    total_chunks = 0
+    total_infer_time = 0.0
 
-            pending_scripts.append(script_path)
-            pending_texts.append(text)
-            pending_outputs.append(output_path)
+    # --------------------------------------------------------
+    # Batch
+    #
+    # Batch ở đây chỉ là nhóm SEGMENT để quản lý.
+    #
+    # Trên CPU/ONNX, VieNeu vẫn inference chunk tuần tự.
+    # --------------------------------------------------------
 
-        if not pending_texts:
-            # Persist existing metadata even when everything is skipped.
-            output_dir.mkdir(parents=True, exist_ok=True)
-            timings_path.write_text(
-                json.dumps(
-                    all_metadata,
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
+    for batch_start in range(
+        0,
+        len(pending),
+        max(1, batch_size),
+    ):
 
-            elapsed = time.perf_counter() - started_total
+        batch = pending[
+            batch_start:
+            batch_start + max(1, batch_size)
+        ]
+
+        batch_end = (
+            batch_start +
+            len(batch)
+        )
+
+        print(
+            f"[BATCH] "
+            f"{batch_start + 1}-{batch_end} "
+            f"/ {len(pending)}"
+        )
+
+        batch_start_time = (
+            time.perf_counter()
+        )
+
+        for item_index, item in enumerate(
+            batch,
+            start=batch_start + 1,
+        ):
+
+            stem = item["stem"]
+
+            text_path = item["text_path"]
+
+            audio_path = item["audio_path"]
 
             print()
-            print("=" * 60)
-            print("Nothing to generate.")
-            print(f"Skipped : {skipped}")
-            print(f"Timings : {timings_path}")
-            print(f"Time    : {elapsed:.2f}s")
-            print("=" * 60)
-
-            return
-
-        # ----------------------------------------------------
-        # Generate in batches
-        # ----------------------------------------------------
-        print(
-            f"Generating {len(pending_texts)} segment(s)..."
-        )
-        print()
-
-        for start in range(
-            0,
-            len(pending_texts),
-            max(1, batch_size),
-        ):
-            end = min(
-                start + max(1, batch_size),
-                len(pending_texts),
-            )
-
-            batch_scripts = pending_scripts[start:end]
-            batch_texts = pending_texts[start:end]
-            batch_outputs = pending_outputs[start:end]
-
             print(
-                f"[BATCH] "
-                f"{start + 1}-{end} / "
-                f"{len(pending_texts)}"
+                f"[{item_index}/{len(pending)}] "
+                f"{stem}"
             )
-
-            batch_started = time.perf_counter()
 
             try:
-                batch_metadata = generate_batch_cached(
+                text = read_text(
+                    text_path
+                )
+
+                if not text:
+                    print(
+                        "    SKIP: empty text"
+                    )
+                    continue
+
+                segment_start = (
+                    time.perf_counter()
+                )
+
+                (
+                    audio,
+                    chunk_count,
+                    infer_time,
+                ) = generate_segment_fast(
                     tts=tts,
-                    script_paths=batch_scripts,
-                    texts=batch_texts,
-                    output_paths=batch_outputs,
+                    text=text,
                     speaker_emb=speaker_emb,
                     ref_codes=ref_codes,
                     style=style,
                     batch_size=batch_size,
+                    max_chars=max_chars,
                 )
 
-                all_metadata.update(batch_metadata)
-                generated += len(batch_texts)
-
-                batch_elapsed = (
-                    time.perf_counter() -
-                    batch_started
-                )
-
-                print(
-                    f"  OK: {len(batch_texts)} segment(s) "
-                    f"in {batch_elapsed:.2f}s"
-                )
-
-            except Exception as exc:
-                # ------------------------------------------------
-                # Robust fallback:
-                # retry each segment through the SAME
-                # sentence-aware pipeline with batch_size=1.
-                # This guarantees timings.json remains complete.
-                # ------------------------------------------------
-                print()
-                print(
-                    f"  Batch failed: {exc}"
-                )
-                print(
-                    "  Falling back to individual generation..."
-                )
-
-                for script_path, text, output_path in zip(
-                    batch_scripts,
-                    batch_texts,
-                    batch_outputs,
+                if (
+                    audio is None
+                    or len(audio) == 0
                 ):
-                    try:
-                        single_started = time.perf_counter()
+                    raise RuntimeError(
+                        "No audio generated"
+                    )
 
-                        single_metadata = generate_batch_cached(
-                            tts=tts,
-                            script_paths=[script_path],
-                            texts=[text],
-                            output_paths=[output_path],
-                            speaker_emb=speaker_emb,
-                            ref_codes=ref_codes,
-                            style=style,
-                            batch_size=1,
-                        )
+                # ------------------------------------------------
+                # Save
+                # ------------------------------------------------
 
-                        all_metadata.update(
-                            single_metadata
-                        )
+                tts.save(
+                    audio,
+                    audio_path,
+                )
 
-                        generated += 1
+                elapsed = (
+                    time.perf_counter()
+                    - segment_start
+                )
 
-                        single_elapsed = (
-                            time.perf_counter() -
-                            single_started
-                        )
+                duration = (
+                    len(audio)
+                    / tts.sample_rate
+                )
 
-                        print(
-                            f"  [OK] {script_path.name} "
-                            f"({single_elapsed:.2f}s)"
-                        )
+                total_chunks += chunk_count
+                total_infer_time += infer_time
 
-                    except Exception as single_exc:
-                        failed += 1
+                generated += 1
 
-                        print(
-                            f"  [FAIL] {script_path.name}: "
-                            f"{single_exc}"
-                        )
+                print(
+                    f"    OK"
+                    f" | chunks={chunk_count}"
+                    f" | audio={duration:.1f}s"
+                    f" | infer={infer_time:.1f}s"
+                    f" | total={elapsed:.1f}s"
+                )
 
-                print()
+            except Exception as e:
 
-            # Persist after every batch. If a later batch fails or the
-            # process is interrupted, completed timings are not lost.
-            output_dir.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+                failed += 1
 
-            timings_path.write_text(
-                json.dumps(
-                    all_metadata,
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
+                print(
+                    f"    FAILED: {stem}"
+                )
 
-            print()
+                print(
+                    f"    Error: {e}"
+                )
 
-    finally:
-        tts.close()
+        batch_elapsed = (
+            time.perf_counter()
+            - batch_start_time
+        )
 
-    # --------------------------------------------------------
-    # Final timings persistence
-    # --------------------------------------------------------
-    output_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+        print()
 
-    timings_path.write_text(
-        json.dumps(
-            all_metadata,
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+        print(
+            f"[BATCH DONE] "
+            f"{batch_end - batch_start + 1}"
+            f"-{batch_end} / {len(pending)} "
+            f"in {batch_elapsed:.2f}s"
+        )
+
+        print()
 
     # --------------------------------------------------------
     # Summary
     # --------------------------------------------------------
-    elapsed = time.perf_counter() - started_total
 
+    total_elapsed = (
+        time.perf_counter()
+        - total_start
+    )
+
+    print()
     print("=" * 60)
+    print()
     print(f"Generated : {generated}")
     print(f"Failed    : {failed}")
     print(f"Skipped   : {skipped}")
-    print(f"Timings   : {timings_path}")
-    print(f"Time      : {elapsed:.2f}s")
-    print("=" * 60)
+    print(
+        f"Chunks    : {total_chunks:,}"
+    )
+    print(
+        f"Infer     : {total_infer_time:.2f}s"
+    )
+    print(
+        f"Time      : {total_elapsed:.2f}s"
+    )
 
-
-# ============================================================
-# Story discovery
-# ============================================================
-
-def discover_stories(
-    stories_root: Path,
-) -> list[Path]:
-
-    if not stories_root.exists():
-        raise FileNotFoundError(
-            f"Stories directory not found: {stories_root}"
+    if total_chunks:
+        print(
+            f"Avg infer/chunk : "
+            f"{total_infer_time / total_chunks:.2f}s"
         )
 
-    stories = [
-        path
-        for path in stories_root.iterdir()
-        if path.is_dir()
-        and (path / "config.json").exists()
-    ]
+    print()
+    print("=" * 60)
+    print()
+
+
+# ============================================================
+# DISCOVER STORIES
+# ============================================================
+
+def discover_stories():
+    if not DEFAULT_STORY_ROOT.exists():
+        return []
 
     return sorted(
-        stories,
+        [
+            p
+            for p in DEFAULT_STORY_ROOT.iterdir()
+            if p.is_dir()
+        ],
         key=natural_key,
     )
 
@@ -911,84 +826,118 @@ def discover_stories(
 # CLI
 # ============================================================
 
-def parse_args():
+def main():
     parser = argparse.ArgumentParser(
-        description="Generate Vietnamese narration using VieNeu-TTS."
+        description=(
+            "VieNeu-TTS FAST story generator "
+            "(chunk-first, no sentence timing)"
+        )
     )
 
     parser.add_argument(
         "story",
         nargs="?",
         type=Path,
-        help="Story directory, e.g. stories/truyen-001",
+        help="Story directory",
     )
 
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Generate all stories under stories/",
+        help="Generate all stories",
+    )
+
+    parser.add_argument(
+        "--only",
+        nargs="+",
+        metavar="FILE",
+        help=(
+            "Generate only the specified text file(s), e.g. "
+            "--only 101.txt or --only 101.txt 102.txt"
+        ),
     )
 
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Regenerate existing WAV files.",
+        help="Regenerate existing WAV files",
     )
 
     parser.add_argument(
         "--batch-size",
         type=int,
         default=DEFAULT_BATCH_SIZE,
-        help=f"Batch size (default: {DEFAULT_BATCH_SIZE}).",
+        help=(
+            "Number of segments grouped for progress "
+            "management. On CPU this does NOT make "
+            "chunks run in parallel."
+        ),
     )
 
-    return parser.parse_args()
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=MAX_CHARS,
+        help=(
+            "Maximum chars per VieNeu chunk "
+            "(default: 256)"
+        ),
+    )
 
-
-def main():
-    args = parse_args()
-
-    if args.batch_size < 1:
-        raise ValueError(
-            "--batch-size must be >= 1"
-        )
-
-    if args.all and args.story:
-        raise ValueError(
-            "Use either STORY or --all, not both."
-        )
-
-    if not args.all and not args.story:
-        raise ValueError(
-            "Specify a story directory or use --all."
-        )
+    args = parser.parse_args()
 
     if args.all:
-        stories = discover_stories(
-            DEFAULT_STORY_ROOT
-        )
+
+        stories = discover_stories()
 
         if not stories:
             print(
-                f"No stories found in "
-                f"{DEFAULT_STORY_ROOT}"
+                "No stories found."
             )
-
             return
 
-        for story_dir in stories:
+        for story in stories:
+
             generate_story(
-                story_dir=story_dir,
+                story,
                 force=args.force,
-                batch_size=args.batch_size,
+                batch_size=max(
+                    1,
+                    args.batch_size,
+                ),
+                only=args.only,
+                max_chars_override=max(1, int(args.max_chars)),
             )
 
-    else:
-        generate_story(
-            story_dir=args.story,
-            force=args.force,
-            batch_size=args.batch_size,
+        return
+
+    if args.story is None:
+
+        print(
+            "Please specify a story."
         )
+
+        print(
+            "Example:"
+        )
+
+        print(
+            "python tts/generate.py "
+            "stories/truyen-001"
+        )
+
+        return
+
+    generate_story(
+        args.story,
+        force=args.force,
+        batch_size=max(
+            1,
+            args.batch_size,
+        ),
+        only=args.only,
+        max_chars_override=max(1, int(args.max_chars)),
+    )
 
 
 if __name__ == "__main__":
