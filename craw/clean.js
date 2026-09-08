@@ -6,6 +6,9 @@ const STORIES_DIR = path.join(__dirname, '../stories/truyen-001/script');
 
 // 2. Danh sách các cụm từ không cần thiết cần xóa
 const JUNK_TEXTS = [
+    'nguồn TruyenFull.vn',
+    'truyen full, truyenfull, truyenfullvn, truyenfulllivetruyenfull,truyenfull vn',
+    'Bạn đang đọc chuyện tại Truyện FULL',
     'truyen full',
     'truyenfullvn',
     'truyenfulllivetruyenfull',

@@ -84,3 +84,28 @@ Skipped   : 0
 Timings   : stories/truyen-001/output/timings.json
 Time      : 24123.66s
 ============================================================
+
+phân tích thời gian chạy
+[BATCH] 1-16 / 59
+  Sentences: 1598 across 16 segment(s)
+  OK: 16 segment(s) in 11214.15s
+
+[BATCH] 17-32 / 59
+  Sentences: 1591 across 16 segment(s)
+  OK: 16 segment(s) in 7725.74s
+
+[BATCH] 33-48 / 59
+  Sentences: 1675 across 16 segment(s)
+  OK: 16 segment(s) in 7614.92s
+
+[BATCH] 49-59 / 59
+  Sentences: 1047 across 11 segment(s)
+  OK: 11 segment(s) in 5339.17s
+
+============================================================
+Generated : 59
+Failed    : 0
+Skipped   : 144
+Timings   : stories/truyen-001/output/timings.json
+Time      : 31902.52s
+============================================================
