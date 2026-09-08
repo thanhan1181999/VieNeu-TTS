@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+import argparse
+import gc
+import hashlib
+import inspect
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from vieneu import Vieneu
+from vieneu.v3turbo import (
+    DEFAULT_REP_WINDOW,
+    gaps_to_silence,
+    join_audio_chunks,
+    normalize_to_chunks_v3_with_gaps,
+)
+
+# ============================================================
+# CONFIG
+# ============================================================
+DEFAULT_BATCH_SIZE = 8
+CACHE_VERSION = 1
+DEFAULT_STORY_ROOT = Path("stories")
+MAX_CHARS = 512
+
+# ============================================================
+# UTILS
+# ============================================================
+def natural_key(path: Path):
+    import re
+    return [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", path.name)]
+
+def load_json(path: Path, default=None):
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+def read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8").strip()
+
+# ============================================================
+# REFERENCE CACHE
+# ============================================================
+def fingerprint_file(path: Path) -> dict[str, Any]:
+    stat = path.stat()
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        first = f.read(1024 * 1024)
+        h.update(first)
+        if stat.st_size > 1024 * 1024:
+            f.seek(max(0, stat.st_size - 1024 * 1024))
+            h.update(f.read(1024 * 1024))
+    return {
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256_partial": h.hexdigest(),
+    }
+
+def cache_path_for_story(story_dir: Path) -> Path:
+    return story_dir / "cache" / "reference.npz"
+
+def load_reference_cache(cache_path: Path, reference_path: Path):
+    if not cache_path.exists():
+        return None
+    try:
+        data = np.load(cache_path, allow_pickle=False)
+        cached_fingerprint = json.loads(str(data["fingerprint"]))
+        current_fingerprint = fingerprint_file(reference_path)
+        if cached_fingerprint != current_fingerprint:
+            print("Reference cache: MISS (reference changed)")
+            return None
+        speaker_emb = np.asarray(data["speaker_emb"], dtype=np.float32)
+        ref_codes = np.asarray(data["ref_codes"], dtype=np.int64)
+        return speaker_emb, ref_codes
+    except Exception as e:
+        print(f"Reference cache: INVALID ({e})")
+        return None
+
+def save_reference_cache(cache_path: Path, reference_path: Path, speaker_emb: np.ndarray, ref_codes: np.ndarray):
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    fingerprint = fingerprint_file(reference_path)
+    np.savez_compressed(
+        cache_path,
+        cache_version=np.array(CACHE_VERSION),
+        fingerprint=np.array(json.dumps(fingerprint, ensure_ascii=False)),
+        speaker_emb=np.asarray(speaker_emb, dtype=np.float32),
+        ref_codes=np.asarray(ref_codes, dtype=np.int64),
+    )
+
+def get_reference(tts: Vieneu, story_dir: Path, reference_path: Path):
+    cache_path = cache_path_for_story(story_dir)
+    cached = load_reference_cache(cache_path, reference_path)
+    if cached is not None:
+        print("Reference cache: HIT")
+        speaker_emb, ref_codes = cached
+        return speaker_emb, ref_codes
+
+    print("Reference cache: MISS\n    Encoding reference...")
+    speaker_emb, ref_codes = tts.encode_reference(reference_path, denoise=True)
+    speaker_emb = np.asarray(speaker_emb, dtype=np.float32)
+    ref_codes = np.asarray(ref_codes, dtype=np.int64)
+    save_reference_cache(cache_path, reference_path, speaker_emb, ref_codes)
+    print("    Reference cache: SAVED")
+    return speaker_emb, ref_codes
+
+# ============================================================
+# FAST TTS (Optimized for Apple Silicon / M2)
+# ============================================================
+def generate_segment_fast(tts, text: str, speaker_emb, ref_codes, style: str, batch_size: int, max_chars: int = MAX_CHARS):
+    text = text.strip()
+    if not text:
+        return np.array([], dtype=np.float32), 0, 0
+
+    chunks, gaps = normalize_to_chunks_v3_with_gaps(text, max_chars=max_chars)
+    if not chunks:
+        return np.array([], dtype=np.float32), 0, 0
+
+    total_chars = len(text)
+    avg_chars = total_chars / len(chunks) if chunks else 0
+    print(f"    Chars : {total_chars:,} | Chunks: {len(chunks)} (avg {avg_chars:.1f} chars/chunk)")
+
+    sampling = dict(
+        temperature=0.8,
+        top_k=25,
+        top_p=0.95,
+        max_new_frames=300,
+        repetition_penalty=1.2,
+        repetition_window=DEFAULT_REP_WINDOW,
+    )
+
+    infer_start = time.perf_counter()
+    infer_chunks_fn = tts._infer_chunks
+    infer_params = inspect.signature(infer_chunks_fn).parameters
+
+    if "batch_size" in infer_params:
+        wavs = infer_chunks_fn(chunks, speaker_emb, ref_codes, True, max(1, int(batch_size)), sampling)
+    else:
+        wavs = infer_chunks_fn(chunks, speaker_emb, ref_codes, True, sampling)
+
+    infer_time = time.perf_counter() - infer_start
+
+    combined_audio = join_audio_chunks(wavs, tts.sample_rate, silence_ps=gaps_to_silence(gaps))
+    combined_audio = tts._apply_watermark(combined_audio)
+
+    return combined_audio, len(chunks), infer_time
+
+# ============================================================
+# STORY GENERATION
+# ============================================================
+def generate_story(
+    story_dir: Path,
+    force: bool = False,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    only: list[str] | None = None,
+    max_chars_override: int | None = None,
+):
+    story_dir = story_dir.resolve()
+    config_path = story_dir / "config.json"
+    config = load_json(config_path, {})
+
+    voice_path = story_dir / config.get("voice", "voice/reference.wav")
+    script_dir = story_dir / config.get("script_dir", "script")
+    audio_dir = story_dir / config.get("audio_dir", "audio")
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    style = config.get("style", "doc_truyen")
+    max_chars = int(max_chars_override if max_chars_override is not None else config.get("max_chars", MAX_CHARS))
+
+    print(f"\nStory: {story_dir.relative_to(Path.cwd())}\nVoice : {voice_path}\nStyle : {style}\nBatch : {batch_size}\n")
+
+    if not voice_path.exists():
+        raise FileNotFoundError(f"Reference voice not found: {voice_path}")
+    if not script_dir.exists():
+        raise FileNotFoundError(f"Script directory not found: {script_dir}")
+
+    text_files = sorted(script_dir.glob("*.txt"), key=natural_key)
+    if only:
+        wanted = {Path(name).stem for name in only}
+        text_files = [p for p in text_files if p.stem in wanted]
+
+    if not text_files:
+        print("No matching .txt files found.")
+        return
+
+    # Tối ưu hóa việc load mô hình cho Apple Silicon
+    print("Loading VieNeu (Tối ưu hóa cho Apple Silicon M2)...")
+    tts = Vieneu(
+        mode="v3turbo",
+        device="cpu",        # Apple Silicon dùng ONNX CPU runtime đa luồng rất nhanh
+        backend="onnx",      # Ép backend ONNX tối ưu
+        threads=0,           # Tận dụng tối đa tất cả các nhân M2
+        max_batch_size=max(batch_size, 1),
+    )
+
+    speaker_emb, ref_codes = get_reference(tts, story_dir, voice_path)
+
+    pending = []
+    skipped = 0
+    for text_path in text_files:
+        stem = text_path.stem
+        audio_path = audio_dir / f"{stem}.wav"
+        if audio_path.exists() and not force:
+            skipped += 1
+            continue
+        pending.append({"stem": stem, "text_path": text_path, "audio_path": audio_path})
+
+    print(f"Generating {len(pending)} segment(s)... (Skipped: {skipped})\n")
+    if not pending:
+        print("Nothing to generate.")
+        return
+
+    total_start = time.perf_counter()
+    generated = 0
+    failed = 0
+    total_chunks = 0
+    total_infer_time = 0.0
+
+    # Dùng ThreadPoolExecutor để đọc file văn bản song song
+    def process_item(item, item_index):
+        nonlocal generated, failed, total_chunks, total_infer_time
+        stem = item["stem"]
+        text_path = item["text_path"]
+        audio_path = item["audio_path"]
+
+        print(f"[{item_index}/{len(pending)}] {stem}")
+        try:
+            text = read_text(text_path)
+            if not text:
+                print("    SKIP: empty text")
+                return
+
+            segment_start = time.perf_counter()
+            audio, chunk_count, infer_time = generate_segment_fast(
+                tts=tts,
+                text=text,
+                speaker_emb=speaker_emb,
+                ref_codes=ref_codes,
+                style=style,
+                batch_size=batch_size,
+                max_chars=max_chars,
+            )
+
+            if audio is None or len(audio) == 0:
+                raise RuntimeError("No audio generated")
+
+            tts.save(audio, audio_path)
+            elapsed = time.perf_counter() - segment_start
+            duration = len(audio) / tts.sample_rate
+
+            total_chunks += chunk_count
+            total_infer_time += infer_time
+            generated += 1
+            print(f"    OK | chunks={chunk_count} | audio={duration:.1f}s | infer={infer_time:.1f}s | total={elapsed:.1f}s")
+        except Exception as e:
+            failed += 1
+            print(f"    FAILED: {stem} | Error: {e}")
+
+    for batch_start in range(0, len(pending), max(1, batch_size)):
+        batch = pending[batch_start : batch_start + max(1, batch_size)]
+        for idx, item in enumerate(batch, start=batch_start + 1):
+            process_item(item, idx)
+        
+        # Dọn dẹp bộ nhớ RAM sau mỗi batch trên Mac
+        gc.collect()
+
+    total_elapsed = time.perf_counter() - total_start
+    print(f"\nGenerated: {generated} | Failed: {failed} | Skipped: {skipped} | Total Time: {total_elapsed:.2f}s")
+
+# ============================================================
+# DISCOVER STORIES & CLI
+# ============================================================
+def discover_stories():
+    if not DEFAULT_STORY_ROOT.exists():
+        return []
+    return sorted([p for p in DEFAULT_STORY_ROOT.iterdir() if p.is_dir()], key=natural_key)
+
+def main():
+    parser = argparse.ArgumentParser(description="VieNeu-TTS FAST story generator (Mac M2 Optimized)")
+    parser.add_argument("story", nargs="?", type=Path, help="Story directory")
+    parser.add_argument("--all", action="store_true", help="Generate all stories")
+    parser.add_argument("--only", nargs="+", metavar="FILE", help="Generate only specified file(s)")
+    parser.add_argument("--force", action="store_true", help="Regenerate existing WAV files")
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size")
+    parser.add_argument("--max-chars", type=int, default=MAX_CHARS, help="Max chars per chunk")
+
+    args = parser.parse_args()
+
+    if args.all:
+        stories = discover_stories()
+        for story in stories:
+            generate_story(story, force=args.force, batch_size=max(1, args.batch_size), only=args.only, max_chars_override=max(1, int(args.max_chars)))
+        return
+
+    if args.story is None:
+        print("Please specify a story directory (e.g. python tts/generate.py stories/truyen-001)")
+        return
+
+    generate_story(args.story, force=args.force, batch_size=max(1, args.batch_size), only=args.only, max_chars_override=max(1, int(args.max_chars)))
+
+if __name__ == "__main__":
+    main()
