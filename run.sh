@@ -18,6 +18,12 @@ caffeinate -i uv run python tts/generate-mac-m2-v2.py stories/"$STORY" --mode v3
 # echo "=== 3. Combining Audio Files ==="
 # uv run python combine.py stories/"$STORY"
 
+# echo "=== 3.  ==="
+# node craw/crawl_title.js \
+#   --url "$URL" \
+#   --story "$STORY" \
+#   --force
+
 echo "=== DONE! ==="
 
 # ./run.sh truyen-001 102 102 "https://truyenfull.live/thieu-gia-bi-bo-roi"
