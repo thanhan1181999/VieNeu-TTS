@@ -13,7 +13,7 @@ echo "=== 1. clean $STORY ($START -> $END) ==="
 node craw/clean1.js
 
 echo "=== 2. Generating TTS Audio ==="
-uv run python tts/generate-mac-m2-v2.py stories/"$STORY" --mode v3turbo --max-chars 512 --batch-size 16 --steps 8
+caffeinate -i uv run python tts/generate-mac-m2-v2.py stories/"$STORY" --mode v3turbo --max-chars 512 --batch-size 16 --steps 8
 
 # echo "=== 3. Combining Audio Files ==="
 # uv run python combine.py stories/"$STORY"

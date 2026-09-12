@@ -12,6 +12,9 @@
 
 **VieNeu-TTS** is the next generation of on-device Vietnamese TTS, featuring **10,000+ hours** of bilingual training, **instant voice cloning**, and a dedicated **Podcast/Conversation** mode.
 
+> [!NOTE]
+> **This fork** is based on [pnnbao97/VieNeu-TTS](https://github.com/pnnbao97/VieNeu-TTS). The goal is a **one-command story-to-video** pipeline on top of the TTS model. See [docs/STORY_PIPELINE.md](docs/STORY_PIPELINE.md).
+
 > [!IMPORTANT]
 > **🦜 VieNeu-TTS v4 — available on [vieneu.io](https://www.vieneu.io)**
 >
@@ -37,6 +40,7 @@
 
 ## 📌 Table of Contents
 
+0. [🎬 Story-to-video pipeline (this fork)](#story-pipeline)
 1. [🦜 Installation & Web UI](#installation)
 2. [📦 Using the Python SDK](#sdk)
 3. [🐳 API Server (v2 — deprecated)](#docker-remote)
@@ -45,6 +49,24 @@
 6. [🚀 Roadmap](#roadmap)
 7. [🤝 Support & Contact](#support)
 8. [📑 Citation](#citation)
+
+---
+
+## 🎬 0. Story-to-video pipeline (this fork) <a name="story-pipeline"></a>
+
+This repo is forked from [pnnbao97/VieNeu-TTS](https://github.com/pnnbao97/VieNeu-TTS). The goal is to use the TTS model to produce a listen-along video with **one command**.
+
+Today `./run.sh` will:
+
+1. Download the story into `stories/truyen-xxx/script/`
+2. Synthesize each chapter to audio with VieNeu-TTS
+3. Build a video with ffmpeg: **one still image** plus the narration files
+
+```bash
+./run.sh truyen-001 102 102 "https://truyenfull.live/thieu-gia-bi-bo-roi"
+```
+
+Full write-up: [docs/STORY_PIPELINE.md](docs/STORY_PIPELINE.md) · [Tiếng Việt](docs/STORY_PIPELINE.vi.md).
 
 ---
 

@@ -12,6 +12,9 @@
 
 **VieNeu-TTS** là thế hệ tiếp theo của mô hình chuyển văn bản thành giọng nói (TTS) tiếng Việt chạy trên thiết bị: **10.000+ giờ dữ liệu** huấn luyện song ngữ, **clone giọng tức thì**, và chế độ **Podcast/Hội thoại** chuyên dụng.
 
+> [!NOTE]
+> **Fork này** lấy từ [pnnbao97/VieNeu-TTS](https://github.com/pnnbao97/VieNeu-TTS). Mục tiêu: dùng model TTS để **tạo video nghe truyện bằng một lệnh**. Chi tiết luồng hiện tại: [docs/STORY_PIPELINE.vi.md](docs/STORY_PIPELINE.vi.md).
+
 > [!IMPORTANT]
 > **🦜 VieNeu-TTS v4 — đã có trên [vieneu.io](https://www.vieneu.io)**
 >
@@ -37,6 +40,7 @@
 
 ## 📌 Mục lục
 
+0. [🎬 Luồng tạo video nghe truyện (fork)](#story-pipeline)
 1. [🦜 Cài đặt & Giao diện Web](#installation)
 2. [📦 Sử dụng Python SDK](#sdk)
 3. [🐳 API Server (v2 — đã ngừng)](#docker-remote)
@@ -45,6 +49,24 @@
 6. [🚀 Lộ trình phát triển](#roadmap)
 7. [🤝 Hỗ trợ & Liên hệ](#support)
 8. [📑 Trích dẫn](#citation)
+
+---
+
+## 🎬 0. Luồng tạo video nghe truyện (fork) <a name="story-pipeline"></a>
+
+Repo này fork từ [pnnbao97/VieNeu-TTS](https://github.com/pnnbao97/VieNeu-TTS). Mục tiêu là dùng model TTS để chạy **một lệnh** ra video nghe truyện.
+
+Hiện tại `./run.sh` tự động:
+
+1. Tải truyện vào `stories/truyen-xxx/script/`
+2. Chuyển từng chương thành file âm thanh bằng model VieNeu-TTS
+3. Tạo video bằng ffmpeg: **một ảnh** + các file nghe truyện
+
+```bash
+./run.sh truyen-001 102 102 "https://truyenfull.live/thieu-gia-bi-bo-roi"
+```
+
+Hướng dẫn đầy đủ: [docs/STORY_PIPELINE.vi.md](docs/STORY_PIPELINE.vi.md) · [English](docs/STORY_PIPELINE.md).
 
 ---
 

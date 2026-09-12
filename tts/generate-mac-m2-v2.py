@@ -216,7 +216,7 @@ def generate_story(
         device="cpu",
         backend="onnx",
         precision="int8",
-        threads=0,
+        threads=8,
         max_batch_size=max(batch_size, 1),
     )
 
