@@ -8,8 +8,15 @@ Tự động hóa toàn bộ quy trình tải truyện, tạo giọng đọc (TT
 
 ### Bước 1: Lấy link truyện
 1. Truy cập [TruyenFull Live](https://truyenfull.live/) và tìm bộ truyện bạn muốn làm video.
-2. Sao chép đường dẫn (URL) của truyện.
-   * **Output:** Link truyện *(Ví dụ: `https://truyenfull.live/thieu-gia-bi-bo-roi/`)*
+2. Sao chép **2 URL** (có thể giống nhau):
+   * **Content URL** — dùng crawl nội dung chương
+   * **Title URL** — dùng crawl danh sách tiêu đề chương
+   * **Output:** *(Ví dụ: `https://truyenfull.live/thieu-gia-bi-bo-roi/`)*
+3. (Tuỳ chọn) Ghi nhớ CSS selector nếu site khác mặc định:
+   * Nội dung: `#chapter-c`
+   * Tiêu đề: `#list-chapter ul.list-chapter`
+
+Chi tiết tham số: [run_interact_with_user.vi.md](./run_interact_with_user.vi.md) / [run_interact_with_user.ja.md](./run_interact_with_user.ja.md)
 
 ---
 

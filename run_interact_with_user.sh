@@ -9,7 +9,17 @@ echo ""
 while true; do read -r -p "Story: " STORY; [ -n "$STORY" ] && break; echo "Story is required."; done
 while true; do read -r -p "Start chapter: " START; [ -n "$START" ] && break; echo "Start chapter is required."; done
 while true; do read -r -p "End chapter: " END; [ -n "$END" ] && break; echo "End chapter is required."; done
-while true; do read -r -p "URL: " URL; [ -n "$URL" ] && break; echo "URL is required."; done
+while true; do read -r -p "Content URL: " CONTENT_URL; [ -n "$CONTENT_URL" ] && break; echo "Content URL is required."; done
+while true; do read -r -p "Title URL: " TITLE_URL; [ -n "$TITLE_URL" ] && break; echo "Title URL is required."; done
+
+DEFAULT_CRAW_SELECTOR="#chapter-c"
+DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
+
+read -r -p "Crawl selector [$DEFAULT_CRAW_SELECTOR]: " CRAW_SELECTOR
+CRAW_SELECTOR="${CRAW_SELECTOR:-$DEFAULT_CRAW_SELECTOR}"
+
+read -r -p "Crawl title selector [$DEFAULT_CRAW_TITLE_SELECTOR]: " CRAW_TITLE_SELECTOR
+CRAW_TITLE_SELECTOR="${CRAW_TITLE_SELECTOR:-$DEFAULT_CRAW_TITLE_SELECTOR}"
 
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
 read -r -p "Voice path [$DEFAULT_VOICE_PATH]: " VOICE_PATH
@@ -80,16 +90,19 @@ echo ""
 echo "============================================================"
 echo "Configuration"
 echo "============================================================"
-echo "Story           : $STORY"
-echo "Chapters        : $START -> $END"
-echo "URL             : $URL"
-echo "Voice Path      : $VOICE_PATH"
-echo "Cover Image     : $COVER_DEST"
+echo "Story                : $STORY"
+echo "Chapters             : $START -> $END"
+echo "Content URL          : $CONTENT_URL"
+echo "Title URL            : $TITLE_URL"
+echo "Crawl selector       : $CRAW_SELECTOR"
+echo "Crawl title selector : $CRAW_TITLE_SELECTOR"
+echo "Voice Path           : $VOICE_PATH"
+echo "Cover Image          : $COVER_DEST"
 echo "------------------------------------------------------------"
-echo "Crawl & Clean   : $CRAWL_AND_CLEAN"
-echo "Generate Audio  : $GENERATE_AUDIO"
-echo "Crawling Title  : $CRAWLING_TITLE"
-echo "Generate Video  : $GENERATE_VIDEO"
+echo "Crawl & Clean        : $CRAWL_AND_CLEAN"
+echo "Generate Audio       : $GENERATE_AUDIO"
+echo "Crawling Title       : $CRAWLING_TITLE"
+echo "Generate Video       : $GENERATE_VIDEO"
 echo "============================================================"
 
 echo ""
@@ -111,7 +124,7 @@ fi
 if [ "$CRAWL_AND_CLEAN" = true ]; then
     echo ""
     echo "=== 1. Crawling Content $STORY ($START -> $END) ==="
-    node craw/crawl.js --story "$STORY" --start "$START" --end "$END" --url "$URL"
+    node craw/crawl.js --story "$STORY" --start "$START" --end "$END" --url "$CONTENT_URL" --selector "$CRAW_SELECTOR"
     echo ""
     echo "=== 2. Cleaning Content $STORY ($START -> $END) ==="
     node craw/clean1.js "$STORY"
@@ -132,7 +145,7 @@ fi
 if [ "$CRAWLING_TITLE" = true ]; then
     echo ""
     echo "=== 4. Crawling Titles ==="
-    node craw/crawl_title.js --url "$URL" --story "$STORY"
+    node craw/crawl_title.js --url "$TITLE_URL" --story "$STORY" --selector "$CRAW_TITLE_SELECTOR"
 else
     echo ""
     echo "=== 4. Crawling Titles SKIPPED ==="
