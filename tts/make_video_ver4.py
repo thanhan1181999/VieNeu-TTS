@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import sys
 import subprocess
@@ -184,17 +185,21 @@ def main():
         ]
 
     # Process each part and generate corresponding video file
+    parts_meta = []
+
     for part_idx, part_chapters in enumerate(parts, start=1):
         first_ch = part_chapters[0]["ch"]
         last_ch = part_chapters[-1]["ch"]
 
-        concat_list = story_dir / f"concat_list_p{part_idx}.txt"
-        srt_file = story_dir / f"subtitles_p{part_idx}.srt"
-        
         if len(parts) == 1:
             output_file = story_dir / f"{story_id}_{start_ch}_{end_ch}.mp4"
         else:
             output_file = story_dir / f"{story_id}_{first_ch}_{last_ch}_part{part_idx}.mp4"
+
+        concat_list = story_dir / f"concat_list_p{part_idx}.txt"
+        # Giữ cùng tên với video để dễ đối chiếu sau này
+        srt_file = output_file.with_suffix(".srt")
+        meta_file = output_file.with_suffix(".json")
 
         print(f"\n==========================================")
         print(f"Processing Part {part_idx}/{len(parts)} (Chapters {first_ch} to {last_ch})")
@@ -264,13 +269,62 @@ def main():
             print(f"\nERROR: FFmpeg failed with exit code {e.returncode} on Part {part_idx}.")
             sys.exit(e.returncode)
 
-        # Cleanup temporary files for this part
+        # Chỉ xóa concat list tạm; giữ srt_file để tra cứu phụ đề theo chương
         concat_list.unlink(missing_ok=True)
-        srt_file.unlink(missing_ok=True)
 
-        print(f"Finished Part {part_idx}: {output_file.name} ({output_file.stat().st_size / (1024 * 1024):.2f} MB)")
+        part_meta = {
+            "story_id": story_id,
+            "part": part_idx,
+            "video": output_file.name,
+            "srt_file": srt_file.name,
+            "first_ch": first_ch,
+            "last_ch": last_ch,
+            "total_duration": round(current_time, 3),
+            "chapters": [
+                {
+                    "ch": item["ch"],
+                    "title": item["title"],
+                    "duration": round(item["duration"], 3),
+                    "wav_file": item["wav_file"].name,
+                }
+                for item in part_chapters
+            ],
+        }
+
+        with open(meta_file, "w", encoding="utf-8") as f_meta:
+            json.dump(part_meta, f_meta, ensure_ascii=False, indent=2)
+
+        parts_meta.append(part_meta)
+
+        print(
+            f"Finished Part {part_idx}: {output_file.name} "
+            f"({output_file.stat().st_size / (1024 * 1024):.2f} MB) "
+            f"| chapters {first_ch}-{last_ch} | srt={srt_file.name} | meta={meta_file.name}"
+        )
+
+    # Tóm tắt toàn bộ các part đã ghép
+    summary_file = story_dir / f"{story_id}_{start_ch}_{end_ch}_parts.json"
+    with open(summary_file, "w", encoding="utf-8") as f_summary:
+        json.dump(
+            {
+                "story_id": story_id,
+                "start_ch": start_ch,
+                "end_ch": end_ch,
+                "parts": parts_meta,
+            },
+            f_summary,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     print("\n=== ALL PARTS DONE ===")
+    print(f"Saved parts summary: {summary_file}")
+    for item in parts_meta:
+        print(
+            f"  Part {item['part']}: video={item['video']} "
+            f"chapters={item['first_ch']}-{item['last_ch']} "
+            f"srt={item['srt_file']}"
+        )
 
 
 if __name__ == "__main__":
