@@ -199,12 +199,12 @@ async function crawlTitles(config) {
     await fs.ensureDir(path.dirname(outputPath));
 
     if (await fs.pathExists(outputPath) && !config.force) {
-        console.log(`[!] File đầu ra đã tồn tại: ${outputPath}`);
-        console.log(`    Dùng tham số --force nếu bạn muốn ghi đè.\n`);
-        process.exit(1);
+        console.log(`[✓] File đầu ra đã tồn tại: ${outputPath}`);
+        console.log(`    Đã hoàn thành thành công. Dùng tham số --force nếu bạn muốn ghi đè.\n`);
+        process.exit(0);
     }
 
-    await fs.writeFile(outputPath, '', 'utf8');
+    await fs.writeFile(outputPath, 'Giới Thiệu Truyện \n', 'utf8');
 
     console.log('');
     console.log('==========================================');

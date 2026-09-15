@@ -1,11 +1,13 @@
 const fs = require('fs-extra');
 const path = require('path');
 
-const STORIES_DIR = path.join(__dirname, '../stories/truyen-001/script');
+// 1. Nhận story ID từ dòng lệnh (ví dụ: node clean1.js truyen-002), mặc định là 'truyen-001'
+const storyId = process.argv[2] || 'truyen-001';
+const STORIES_DIR = path.join(__dirname, `../stories/${storyId}/script`);
 
 // Sắp xếp từ dài đến ngắn để Regex ưu tiên match chuỗi dài trước
 const JUNK_TEXTS = [
-// 1. Cụm câu dài
+    // 1. Cụm câu dài
     'Bạn đang đọc chuyện tại Truyện FULL',
     'Bạn đang đọc truyện tại Truyện FULL',
     
@@ -35,14 +37,14 @@ async function cleanTextFiles() {
             return;
         }
 
-        console.log(`[*] Bắt đầu dọn dẹp ${txtFiles.length} file .txt...\n`);
+        console.log(`[*] Bắt đầu dọn dẹp ${txtFiles.length} file .txt của truyện [${storyId}]...\n`);
 
         // Tạo Regex match cả khoảng trắng/dấu cách xung quanh từ rác
         const escapedJunk = JUNK_TEXTS.map(text => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'));
         const junkRegex = new RegExp(`(?:\\s*)*(?:${escapedJunk.join('|')})(?:\\s*)*`, 'gi');
 
         let updatedCount = 0;
-        const BATCH_SIZE = 50; // Xử lý song song mỗi lần 50 file để tránh quá tải I/O
+        const BATCH_SIZE = 50;
 
         for (let i = 0; i < txtFiles.length; i += BATCH_SIZE) {
             const chunk = txtFiles.slice(i, i + BATCH_SIZE);
@@ -51,16 +53,29 @@ async function cleanTextFiles() {
                 const filePath = path.join(STORIES_DIR, file);
                 const content = await fs.readFile(filePath, 'utf-8');
 
-                // 1. Xóa rác
+                // Step 1: Xóa các từ/cụm từ rác
                 let cleaned = content.replace(junkRegex, ' ');
 
-                // 2. Tối ưu khoảng trắng thừa trên cùng 1 dòng
-                cleaned = cleaned.replace(/[ \t]+/g, ' ');
+                // Step 2: Chuẩn hóa xuống dòng (chuyển CRLF \r\n thành LF \n)
+                cleaned = cleaned.replace(/\r\n/g, '\n');
 
-                // 3. Xóa các dòng trống thừa (nhiều hơn 2 dòng trống liên tiếp -> giữ lại tối đa 1)
-                cleaned = cleaned.replace(/\n\s*\n\s*\n+/g, '\n\n');
+                // Step 3: Tách văn bản thành các đoạn (các đoạn vốn phân cách bởi 2 hoặc nhiều dòng trống)
+                const paragraphs = cleaned.split(/\n\s*\n+/);
 
-                const finalContent = cleaned.trim();
+                // Step 4: Xử lý từng đoạn - gộp các dòng lẻ bị xuống dòng bừa bãi thành 1 dòng duy nhất
+                const fixedParagraphs = paragraphs
+                    .map(p => {
+                        return p
+                            .split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line.length > 0)
+                            .join(' ')             // Gộp các dòng lẻ trong 1 câu bằng khoảng trắng
+                            .replace(/[ \t]+/g, ' '); // Tối ưu khoảng trắng thừa
+                    })
+                    .filter(p => p.length > 0);   // Loại bỏ đoạn trống
+
+                // Step 5: Nối lại các đoạn với đúng 1 dòng trống ở giữa (\n\n)
+                const finalContent = fixedParagraphs.join('\n\n');
 
                 if (content !== finalContent) {
                     await fs.writeFile(filePath, finalContent, 'utf-8');

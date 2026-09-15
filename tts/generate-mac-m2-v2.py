@@ -182,6 +182,8 @@ def generate_story(
     max_chars_override: int | None = None,
     mode: str = "v3nano",
     steps: int = 6,
+    start: int | None = None,
+    end: int | None = None,
 ):
     story_dir = story_dir.resolve()
     config_path = story_dir / "config.json"
@@ -205,6 +207,21 @@ def generate_story(
     if only:
         wanted = {Path(name).stem for name in only}
         text_files = [p for p in text_files if p.stem in wanted]
+
+    # Apply start/end range (1-based chapter numbers)
+    if start is not None or end is not None:
+        start_idx = start if start is not None else 0
+        end_idx = (end + 1) if end is not None else len(text_files)
+        
+        # Validate range
+        if start_idx < 0:
+            start_idx = 0
+        if end_idx > len(text_files):
+            end_idx = len(text_files)
+        if start_idx >= len(text_files) or start_idx >= end_idx:
+            print("No files in the specified range.")
+            return
+        text_files = text_files[start_idx:end_idx]
 
     if not text_files:
         print("No matching .txt files found.")
@@ -311,6 +328,8 @@ def main():
     parser.add_argument("story", nargs="?", type=Path, help="Story directory")
     parser.add_argument("--all", action="store_true", help="Generate all stories")
     parser.add_argument("--only", nargs="+", metavar="FILE", help="Generate only specified file(s)")
+    parser.add_argument("--start", type=int, default=None, help="Start chapter number (1-based)")
+    parser.add_argument("--end", type=int, default=None, help="End chapter number (1-based)")
     parser.add_argument("--force", action="store_true", help="Regenerate existing WAV files")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size")
     parser.add_argument("--max-chars", type=int, default=MAX_CHARS, help="Max chars per chunk")
@@ -329,6 +348,8 @@ def main():
                 max_chars_override=max(1, int(args.max_chars)),
                 mode=args.mode,
                 steps=args.steps,
+                start=args.start,
+                end=args.end,
             )
         return
 
@@ -344,6 +365,8 @@ def main():
         max_chars_override=max(1, int(args.max_chars)),
         mode=args.mode,
         steps=args.steps,
+        start=args.start,
+        end=args.end,
     )
 
 if __name__ == "__main__":

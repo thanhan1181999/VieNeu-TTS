@@ -80,6 +80,9 @@ dependencies = [
     # NOTE: audio watermarking is opt-in via `pip install vieneu[watermark]` (resemble-perth,
     # needs torch/torchaudio). The PyPI package literally named `perth` is an unrelated
     # threading helper and must NOT be listed here (issue #191).
+    "google-api-python-client>=2.200.0",
+    "google-auth-oauthlib>=1.4.1",
+    "google-auth-httplib2>=0.4.2",
 ]
 
 [project.urls]

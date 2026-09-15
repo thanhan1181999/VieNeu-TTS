@@ -21,3 +21,5 @@ finetune/output/
 merged_models_cache/
 
 stories**
+
+upload/**.txt

@@ -1,111 +1,86 @@
-node craw/crawl.js --story truyen-001 --start 102 --end 102 --url "https://truyenfull.live/thieu-gia-bi-bo-roi"
+# Auto Story Video Generator
 
-uv run python tts/generate.py stories/truyen-001
-uv run python tts/combine.py stories/truyen-001
-uv run python tts/subtitles.py stories/truyen-001
+Tự động hóa toàn bộ quy trình tải truyện, tạo giọng đọc (TTS) và tổng hợp video đọc truyện hoàn chỉnh để đăng YouTube chỉ với **1 dòng lệnh**.
 
-uv run python tts/generate.py stories/truyen-001 --batch-size 8
+---
 
-uv run vieneu-web
+## 📋 Quy trình chuẩn bị (4 bước)
 
-uv run python tts/generate.py stories/truyen-001                                                                                                                                                                                    ok  at 23:07:13 
+### Bước 1: Lấy link truyện
+1. Truy cập [TruyenFull Live](https://truyenfull.live/) và tìm bộ truyện bạn muốn làm video.
+2. Sao chép đường dẫn (URL) của truyện.
+   * **Output:** Link truyện *(Ví dụ: `https://truyenfull.live/thieu-gia-bi-bo-roi/`)*
 
-============================================================
-Story: stories/truyen-001
-============================================================
-Voice : stories/truyen-001/voice/reference.wav
-Style : doc_truyen
-Batch : 8
-Texts : 100
+---
 
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Reference cache: HIT
-    speaker_emb: (192,) float32
-    ref_codes: (101, 16) int64
+### Bước 2: Tạo ảnh bìa (Thumbnail / Cover)
+1. Sử dụng **ChatGPT** hoặc **Gemini** để tạo ảnh minh họa phù hợp với cốt truyện.
+   * **Prompt gợi ý:**
+     > *"Mình đang muốn tạo 1 ảnh làm avatar/thumbnail cho video audio truyện: [DÁN_LINK_TRUYỆN]. Hãy ghi thêm vào trong ảnh 1 câu ngắn thu hút người xem nhé."*
+2. Tải ảnh về máy tính.
+   * **Output:** Đường dẫn lưu file ảnh trên máy local *(Ví dụ: `/path/to/cover.jpg`)*
 
-Generating 100 segment(s)...
+---
 
-[BATCH] 1-8 / 100
-  Sentences: 517 across 8 segment(s)
-  OK: 8 segment(s) in 2077.68s
+### Bước 3: Chuẩn bị giọng đọc mẫu (Voice Sample)
+1. Ghi âm giọng đọc của chính bạn hoặc tải một file âm thanh mẫu (.mp3) từ trên mạng về máy.
+   * **Output:** Đường dẫn lưu file `.mp3` trên máy local *(Ví dụ: `/path/to/voice_sample.mp3`)*
 
-[BATCH] 9-16 / 100
-  Sentences: 546 across 8 segment(s)
-  OK: 8 segment(s) in 1971.05s
+---
 
-[BATCH] 17-24 / 100
-  Sentences: 658 across 8 segment(s)
-  OK: 8 segment(s) in 1815.65s
+### Bước 4: Chạy Script tự động
+Mở Terminal và thực thi lệnh sau:
 
-[BATCH] 25-32 / 100
-  Sentences: 692 across 8 segment(s)
-  OK: 8 segment(s) in 1906.43s
+```bash
+cd projects/vieneu-test/VieNeu-TTS
+./run_interact_with_user.sh
+```
 
-[BATCH] 33-40 / 100
-  Sentences: 595 across 8 segment(s)
-  OK: 8 segment(s) in 1970.40s
+bước 5: để upload video lên youtube, chuẩn bị title và description cho mỗi video đã tạo, xác định tags dùng chung cho tất cả video 
+lên chatgpt hoặc gemini gõ promt theo ví dụ
+copy nội dung trả về theo từng file vào thư mục truyện, đặt tên mỗi file là phan_1_title.txt, phan_1_script.txt
+output: 2 file phan_1_title.txt, phan_1_script.txt với mỗi phần truyện; và 1 file chung là tags.txt
 
-[BATCH] 41-48 / 100
-  Sentences: 617 across 8 segment(s)
-  OK: 8 segment(s) in 1937.39s
+promt ví dụ: 
+bối cảnh: hiện tại mình muốn đăng video audio truyện lên youtube
 
-[BATCH] 49-56 / 100
-  Sentences: 535 across 8 segment(s)
-  OK: 8 segment(s) in 1837.06s
+yêu cầu 1: vì vậy, với mỗi phần truyện, hãy gợi ý mình cách điền thông tin title và descrition một cách hấp dẫn người nghe nhất (tức là với 34 phần thì có 34 title và 34 description)
 
-[BATCH] 57-64 / 100
-  Sentences: 562 across 8 segment(s)
-  OK: 8 segment(s) in 1837.47s
+yêu cầu 2: tạo các tag cần đánh vào các video để thu hút nhiều người hơn
 
-[BATCH] 65-72 / 100
-  Sentences: 695 across 8 segment(s)
-  OK: 8 segment(s) in 1806.21s
+phần 1: Chương 1 -> Chương 95
+phần 2: Chương 96 -> Chương 166
+phần 3: Chương 167 -> Chương 238
+phần 4: Chương 239 -> Chương 309
+phần 5: Chương 310 -> Chương 380
+phần 6: Chương 381 -> Chương 451
+phần 7: Chương 452 -> Chương 520
+phần 8: Chương 521 -> Chương 590
+phần 9: Chương 591 -> Chương 659
+phần 10: Chương 660 -> Chương 729
+phần 11: Chương 730 -> Chương 798
+phần 12: Chương 799 -> Chương 867
+phần 13: Chương 868 -> Chương 938
+phần 14: Chương 939 -> Chương 1007
+phần 15: Chương 1008 -> Chương 1075
+phần 16: Chương 1076 -> Chương 1141
+phần 17: Chương 1142 -> Chương 1206
+phần 18: Chương 1207 -> Chương 1272
+phần 19: Chương 1273 -> Chương 1337
+phần 20: Chương 1338 -> Chương 1403
+phần 21: Chương 1404 -> Chương 1468
+phần 22: Chương 1469 -> Chương 1535
+phần 23: Chương 1536 -> Chương 1600
+phần 24: Chương 1601 -> Chương 1666
+phần 25: Chương 1667 -> Chương 1729
+phần 26: Chương 1730 -> Chương 1794
+phần 27: Chương 1795 -> Chương 1859
+phần 28: Chương 1860 -> Chương 1925
+phần 29: Chương 1926 -> Chương 1992
+phần 30: Chương 1993 -> Chương 2061
+phần 31: Chương 2062 -> Chương 2130
+phần 32: Chương 2131 -> Chương 2199
+phần 33: Chương 2200 -> Chương 2266
+phần 34: Chương 2267 -> Chương 2271
 
-[BATCH] 73-80 / 100
-  Sentences: 677 across 8 segment(s)
-  OK: 8 segment(s) in 1722.57s
-
-[BATCH] 81-88 / 100
-  Sentences: 765 across 8 segment(s)
-  OK: 8 segment(s) in 1915.25s
-
-[BATCH] 89-96 / 100
-  Sentences: 511 across 8 segment(s)
-  OK: 8 segment(s) in 1994.53s
-
-[BATCH] 97-100 / 100
-  Sentences: 344 across 4 segment(s)
-  OK: 4 segment(s) in 1324.54s
-
-============================================================
-Generated : 100
-Failed    : 0
-Skipped   : 0
-Timings   : stories/truyen-001/output/timings.json
-Time      : 24123.66s
-============================================================
-
-phân tích thời gian chạy
-[BATCH] 1-16 / 59
-  Sentences: 1598 across 16 segment(s)
-  OK: 16 segment(s) in 11214.15s
-
-[BATCH] 17-32 / 59
-  Sentences: 1591 across 16 segment(s)
-  OK: 16 segment(s) in 7725.74s
-
-[BATCH] 33-48 / 59
-  Sentences: 1675 across 16 segment(s)
-  OK: 16 segment(s) in 7614.92s
-
-[BATCH] 49-59 / 59
-  Sentences: 1047 across 11 segment(s)
-  OK: 11 segment(s) in 5339.17s
-
-============================================================
-Generated : 59
-Failed    : 0
-Skipped   : 144
-Timings   : stories/truyen-001/output/timings.json
-Time      : 31902.52s
-============================================================
+bước 6: chạy file upload_youtube.py

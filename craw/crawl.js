@@ -138,12 +138,20 @@ function validateConfig(config) {
         process.exit(1);
     }
 
-    if (!Number.isInteger(config.start) || config.start < 1) {
+    if (!Number.isInteger(config.start)) {
         console.error(
-            '[X] --start phải là số nguyên >= 1'
+            '[X] --start phải là số nguyên'
         );
 
         process.exit(1);
+    }
+
+    if (config.start < 1) {
+        config.start = 1;
+
+        console.log(
+            '[X] --start nhỏ hơn 1 nên sẽ convert thành 1'
+        )
     }
 
     if (!Number.isInteger(config.end) ||
@@ -471,8 +479,7 @@ async function crawlNovels(config) {
             chapter
         );
 
-        console.log(`[*] Chương ${chapter}`);
-        console.log(`    URL: ${chapterUrl}`);
+        console.log(`[*] Chương ${chapter},  URL: ${chapterUrl}`);
 
         // --------------------------------------
         // SKIP EXISTING FILE
@@ -482,10 +489,6 @@ async function crawlNovels(config) {
             !config.force &&
             await fs.pathExists(filePath)
         ) {
-
-            console.log(
-                `    [-] Đã tồn tại → bỏ qua`
-            );
 
             skipped++;
 
@@ -517,18 +520,14 @@ async function crawlNovels(config) {
 
             if (content === null) {
 
-                console.warn(
-                    `    [!] Không tìm thấy selector: ` +
-                    `${config.selector}`
-                );
+                // console.warn(
+                //     `    [!] Không tìm thấy selector: ` +
+                //     `${config.selector}`
+                // );
 
                 failed++;
 
             } else if (!content.trim()) {
-
-                console.warn(
-                    `    [!] Nội dung chương ${chapter} rỗng`
-                );
 
                 failed++;
 
@@ -544,25 +543,10 @@ async function crawlNovels(config) {
                     'utf8'
                 );
 
-                console.log(
-                    `    [✓] Đã lưu: ${filePath}`
-                );
-
-                console.log(
-                    `    [i] ` +
-                    `${content.length.toLocaleString()} ký tự`
-                );
-
                 success++;
             }
 
         } catch (error) {
-
-            console.error(
-                `    [X] Lỗi chương ${chapter}: ` +
-                `${error.message}`
-            );
-
             failed++;
         }
 
