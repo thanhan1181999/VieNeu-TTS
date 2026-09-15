@@ -233,9 +233,15 @@ def main():
             f_srt.write("\n")
 
         # FFmpeg command
+        # part_idx bắt đầu từ 1 → nhãn tập hiển thị góc trên trái
+        episode_label = f"Tập {part_idx}"
         subtitle_path = escape_filter_path(srt_file)
         video_filter = (
             f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+            f"drawtext=text='{episode_label}':"
+            f"font='Roboto':fontsize=48:fontcolor=white:borderw=4:bordercolor=black:"
+            f"shadowcolor=black@0.6:shadowx=2:shadowy=2:"
+            f"x=36:y=28,"
             f"subtitles='{subtitle_path}':"
             f"force_style='FontName=Roboto,FontSize=26,Bold=1,"
             f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
