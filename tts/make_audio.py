@@ -354,7 +354,7 @@ def main():
         return
 
     if args.story is None:
-        print("Please specify a story directory (e.g. python tts/generate-mac-m2-v1.py stories/truyen-001)")
+        print("Please specify a story directory (e.g. python tts/make_audio.py stories/truyen-001)")
         return
 
     generate_story(

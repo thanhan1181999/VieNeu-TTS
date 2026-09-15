@@ -1,86 +1,163 @@
-# Auto Story Video Generator
+# VieNeu-TTS — Hướng dẫn TTS / tạo video
 
-Tự động hóa toàn bộ quy trình tải truyện, tạo giọng đọc (TTS) và tổng hợp video đọc truyện hoàn chỉnh để đăng YouTube chỉ với **1 dòng lệnh**.
+Các script trong thư mục `tts` dùng để sinh âm thanh (WAV) từ văn bản chương, rồi ghép ảnh tĩnh + audio thành video (MP4).
 
----
-
-## 📋 Quy trình chuẩn bị (4 bước)
-
-### Bước 1: Lấy link truyện
-1. Truy cập [TruyenFull Live](https://truyenfull.live/) và tìm bộ truyện bạn muốn làm video.
-2. Sao chép đường dẫn (URL) của truyện.
-   * **Output:** Link truyện *(Ví dụ: `https://truyenfull.live/thieu-gia-bi-bo-roi/`)*
+Nên chạy lệnh từ **thư mục gốc của repo**.
 
 ---
 
-### Bước 2: Tạo ảnh bìa (Thumbnail / Cover)
-1. Sử dụng **ChatGPT** hoặc **Gemini** để tạo ảnh minh họa phù hợp với cốt truyện.
-   * **Prompt gợi ý:**
-     > *"Mình đang muốn tạo 1 ảnh làm avatar/thumbnail cho video audio truyện: [DÁN_LINK_TRUYỆN]. Hãy ghi thêm vào trong ảnh 1 câu ngắn thu hút người xem nhé."*
-2. Tải ảnh về máy tính.
-   * **Output:** Đường dẫn lưu file ảnh trên máy local *(Ví dụ: `/path/to/cover.jpg`)*
+## Cấu trúc thư mục cần có
 
----
-
-### Bước 3: Chuẩn bị giọng đọc mẫu (Voice Sample)
-1. Ghi âm giọng đọc của chính bạn hoặc tải một file âm thanh mẫu (.mp3) từ trên mạng về máy.
-   * **Output:** Đường dẫn lưu file `.mp3` trên máy local *(Ví dụ: `/path/to/voice_sample.mp3`)*
-
----
-
-### Bước 4: Chạy Script tự động
-Mở Terminal và thực thi lệnh sau:
-
-```bash
-cd projects/vieneu-test/VieNeu-TTS
-./run_interact_with_user.sh
+```text
+stories/<story_id>/
+  ├── script/           # văn bản từng chương (1.txt, 2.txt, ...)
+  ├── voice/
+  │   └── reference.wav # giọng mẫu (clone)
+  ├── audio/            # output TTS (1.wav, 2.wav, ...)
+  ├── titles.txt        # danh sách tiêu đề chương (phụ đề video)
+  ├── cover.jpeg        # ảnh bìa (tuỳ chọn)
+  └── config.json       # tuỳ chọn (voice / script_dir / audio_dir, ...)
 ```
 
-bước 5: để upload video lên youtube, chuẩn bị title và description cho mỗi video đã tạo, xác định tags dùng chung cho tất cả video 
-lên chatgpt hoặc gemini gõ promt theo ví dụ
-copy nội dung trả về theo từng file vào thư mục truyện, đặt tên mỗi file là phan_1_title.txt, phan_1_script.txt
-output: 2 file phan_1_title.txt, phan_1_script.txt với mỗi phần truyện; và 1 file chung là tags.txt
+Luồng khuyến nghị:
 
-promt ví dụ: 
-bối cảnh: hiện tại mình muốn đăng video audio truyện lên youtube
+1. `make_audio.py` — text → WAV
+2. `make_video_ver4.py` — WAV + ảnh → MP4
 
-yêu cầu 1: vì vậy, với mỗi phần truyện, hãy gợi ý mình cách điền thông tin title và descrition một cách hấp dẫn người nghe nhất (tức là với 34 phần thì có 34 title và 34 description)
+---
 
-yêu cầu 2: tạo các tag cần đánh vào các video để thu hút nhiều người hơn
+## 1. `make_audio.py` — Sinh âm thanh (TTS)
 
-phần 1: Chương 1 -> Chương 95
-phần 2: Chương 96 -> Chương 166
-phần 3: Chương 167 -> Chương 238
-phần 4: Chương 239 -> Chương 309
-phần 5: Chương 310 -> Chương 380
-phần 6: Chương 381 -> Chương 451
-phần 7: Chương 452 -> Chương 520
-phần 8: Chương 521 -> Chương 590
-phần 9: Chương 591 -> Chương 659
-phần 10: Chương 660 -> Chương 729
-phần 11: Chương 730 -> Chương 798
-phần 12: Chương 799 -> Chương 867
-phần 13: Chương 868 -> Chương 938
-phần 14: Chương 939 -> Chương 1007
-phần 15: Chương 1008 -> Chương 1075
-phần 16: Chương 1076 -> Chương 1141
-phần 17: Chương 1142 -> Chương 1206
-phần 18: Chương 1207 -> Chương 1272
-phần 19: Chương 1273 -> Chương 1337
-phần 20: Chương 1338 -> Chương 1403
-phần 21: Chương 1404 -> Chương 1468
-phần 22: Chương 1469 -> Chương 1535
-phần 23: Chương 1536 -> Chương 1600
-phần 24: Chương 1601 -> Chương 1666
-phần 25: Chương 1667 -> Chương 1729
-phần 26: Chương 1730 -> Chương 1794
-phần 27: Chương 1795 -> Chương 1859
-phần 28: Chương 1860 -> Chương 1925
-phần 29: Chương 1926 -> Chương 1992
-phần 30: Chương 1993 -> Chương 2061
-phần 31: Chương 2062 -> Chương 2130
-phần 32: Chương 2131 -> Chương 2199
-phần 33: Chương 2200 -> Chương 2266
-phần 34: Chương 2267 -> Chương 2271
+Đọc từng file `.txt` trong `script/`, dùng VieNeu (ONNX INT8, tối ưu Apple Silicon) để tạo `audio/<số_chương>.wav`. Giọng tham chiếu được cache tại `cache/reference.npz`.
 
-bước 6: chạy file upload_youtube.py
+### Lệnh cơ bản
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001
+```
+
+Mặc định khi không truyền thêm tham số: **`mode=v3nano`**, **`steps=6`**, **`precision=int8`**, **`batch-size=8`**, **`max-chars=512`** (ưu tiên tốc độ).
+
+### Tham số CLI
+
+| Tham số | Ý nghĩa | Mặc định |
+|---|---|---|
+| `story` | Thư mục truyện (ví dụ: `stories/truyen-001`) | bắt buộc (trừ khi dùng `--all`) |
+| `--all` | Xử lý mọi thư mục trong `stories/` | tắt |
+| `--only FILE ...` | Chỉ các file chỉ định (stem, ví dụ: `1` `2`) | tất cả |
+| `--start N` | Chương bắt đầu (1-based, theo vị trí trong danh sách `script` đã sort) | đầu danh sách |
+| `--end N` | Chương kết thúc (1-based, inclusive) | cuối danh sách |
+| `--force` | Tạo lại cả file WAV đã có | tắt (bỏ qua file đã tồn tại) |
+| `--batch-size N` | Kích thước batch | `8` |
+| `--max-chars N` | Số ký tự tối đa mỗi chunk | `512` |
+| `--mode` | `v3nano` / `v3turbo` | `v3nano` |
+| `--steps N` | Số bước Euler sampling (càng nhỏ càng nhanh) | `6` |
+
+### Ví dụ
+
+Dùng mô hình Turbo:
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001 --mode v3turbo
+```
+
+Giảm steps để tăng tốc:
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001 --steps 6
+```
+
+Chỉ một khoảng chương:
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001 --start 102 --end 120
+```
+
+Toàn bộ truyện trong `stories/`:
+
+```bash
+uv run python tts/make_audio.py --all
+```
+
+Ép tạo lại WAV đã có:
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001 --force
+```
+
+Tổ hợp thường dùng trong pipeline:
+
+```bash
+uv run python tts/make_audio.py stories/truyen-001 \
+  --mode v3turbo --max-chars 512 --batch-size 16 --steps 8 \
+  --start 102 --end 102
+```
+
+### Điều kiện cần
+
+- `stories/<id>/voice/reference.wav` (hoặc đường dẫn trong `config.json` → `voice`)
+- `stories/<id>/script/*.txt`
+
+Nếu WAV đã tồn tại và không có `--force`, chương đó sẽ được bỏ qua.
+
+---
+
+## 2. `make_video_ver4.py` — Tạo video (ffmpeg)
+
+Nối các file WAV trong khoảng chương, ghép với ảnh bìa (hoặc nền đen) và phụ đề tiêu đề chương thành MP4.
+
+### Lệnh cơ bản
+
+```bash
+uv run python tts/make_video_ver4.py <STORY_ID> <START_CH> <END_CH>
+```
+
+Ví dụ:
+
+```bash
+uv run python tts/make_video_ver4.py truyen-001 1 50
+```
+
+| Tham số | Ý nghĩa |
+|---|---|
+| `STORY_ID` | Tên thư mục trong `stories/` (không kèm đường dẫn) |
+| `START_CH` | Số chương bắt đầu |
+| `END_CH` | Số chương kết thúc (inclusive) |
+
+### Đầu vào cần có
+
+| Đường dẫn | Bắt buộc | Mô tả |
+|---|---|---|
+| `stories/<id>/audio/<chương>.wav` | Có | Phải đủ mọi chương trong khoảng |
+| `stories/<id>/titles.txt` | Có | Mỗi dòng là tiêu đề; chỉ số dòng tương ứng số chương |
+| `stories/<id>/cover.jpeg` | Không | Thiếu thì dùng nền đen |
+
+Các file WAV phải cùng channels / sample width / sample rate.
+
+### Cách hoạt động
+
+- Độ phân giải `1280x720`, encode ảnh tĩnh (`libx264` + AAC `128k`)
+- Phụ đề lấy từ tiêu đề từng chương trong `titles.txt` (chữ trắng, phía dưới)
+- Nếu tổng thời lượng **> 11 giờ 30 phút** thì tự tách thành nhiều phần
+  - Một phần: `<story_id>_<start>_<end>.mp4`
+  - Nhiều phần: `<story_id>_<first>_<last>_partN.mp4`
+- File tạm (concat list / SRT) được xóa sau khi xong
+
+### Phụ thuộc
+
+- Máy đã cài `ffmpeg`
+
+---
+
+## Chạy nối tiếp (ví dụ)
+
+```bash
+# 1) Sinh audio
+uv run python tts/make_audio.py stories/truyen-001 --mode v3turbo --start 1 --end 50
+
+# 2) Lấy titles (nếu chưa có)
+node craw/crawl_title.js --url "<url-truyện>" --story truyen-001
+
+# 3) Tạo video
+uv run python tts/make_video_ver4.py truyen-001 1 50
+```

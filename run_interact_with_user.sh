@@ -123,7 +123,7 @@ fi
 if [ "$GENERATE_AUDIO" = true ]; then
     echo ""
     echo "=== 3. Generating TTS Audio ==="
-    caffeinate -i uv run python tts/generate-mac-m2-v2.py stories/"$STORY" --mode v3turbo --max-chars 512 --batch-size 16 --start "$START" --end "$END" --steps 8
+    caffeinate -i uv run python tts/make_audio.py stories/"$STORY" --mode v3turbo --max-chars 512 --batch-size 16 --start "$START" --end "$END" --steps 8
 else
     echo ""
     echo "=== 3. Generating TTS Audio SKIPPED ==="
