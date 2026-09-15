@@ -1,0 +1,22 @@
+---
+description: Base rule mẫu cho VieNeu-TTS — chuẩn cốt lõi luôn áp dụng
+alwaysApply: true
+---
+
+# VieNeu-TTS — Base Rule (mẫu)
+
+## Ngôn ngữ & tài liệu
+- Trả lời user bằng **tiếng Việt**.
+- Viết file tài liệu bằng **tiếng Việt**.
+
+## Bối cảnh dự án
+- được fork từ 1 dự án chuyển text to speech, nhưng chỉ tập trung vào việc crawl truyện từ website,dùng model TTS để sinh âm thanh từ text; tạo và sửa video với ffmepg; và upload video đã tạo lên youtube
+
+## Dependencies & môi trường
+- Chỉ sửa code, không chạy bất kì command nào
+
+## Khi sửa code
+- Ưu tiên thay đổi nhỏ, đúng scope yêu cầu; không refactor lan rộng.
+
+## Git
+- Không commit / push / tạo PR trừ khi user yêu cầu rõ.
