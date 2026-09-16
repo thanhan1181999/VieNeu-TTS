@@ -43,6 +43,9 @@ cd projects/vieneu-test/VieNeu-TTS
 ./run_interact_with_user.sh
 ```
 
+- **Lần đầu** (truyện mới): nhập đầy đủ URL, selector, voice, cover, …
+- **Lần sau**: chỉ cần `Story` + khoảng chương + chọn bước chạy; cấu hình nằm trong `stories/<Story>/config.json`
+
 bước 5: để upload video lên youtube, chuẩn bị title và description cho mỗi video đã tạo, xác định tags dùng chung cho tất cả video 
 lên chatgpt hoặc gemini gõ promt theo ví dụ
 copy nội dung trả về theo từng file vào thư mục truyện, đặt tên mỗi file là phan_1_title.txt, phan_1_script.txt
