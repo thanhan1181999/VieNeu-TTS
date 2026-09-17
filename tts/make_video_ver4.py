@@ -67,17 +67,53 @@ def run_command(cmd):
     subprocess.run(cmd, check=True)
 
 
+def parse_bool_arg(value):
+    normalized = value.strip().lower()
+    if normalized in ("true", "yes", "y", "1"):
+        return True
+    if normalized in ("false", "no", "n", "0"):
+        return False
+    raise ValueError(f"Invalid boolean value: {value}")
+
+
+def ask_bool(prompt, default=True):
+    suffix = " [Y/n]: " if default else " [y/N]: "
+
+    while True:
+        value = input(prompt + suffix).strip().lower()
+
+        if not value:
+            return default
+
+        if value in ("y", "yes"):
+            return True
+
+        if value in ("n", "no"):
+            return False
+
+        print("Please enter y/yes or n/no.")
+
+
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         print(
             f"Usage: python3 {Path(sys.argv[0]).name} "
-            "<STORY_ID> <START_CH> <END_CH>"
+            "<STORY_ID> <START_CH> <END_CH> [true|false]"
         )
         sys.exit(1)
 
     story_id = sys.argv[1]
     start_ch = int(sys.argv[2])
     end_ch = int(sys.argv[3])
+
+    if len(sys.argv) == 5:
+        try:
+            add_episode_label = parse_bool_arg(sys.argv[4])
+        except ValueError:
+            print("Argument 4 must be true/false (add episode_label).")
+            sys.exit(1)
+    else:
+        add_episode_label = ask_bool("Add episode_label?", default=True)
 
     story_dir = Path("stories") / story_id
     audio_dir = story_dir / "audio"
@@ -235,42 +271,53 @@ def main():
 
         # FFmpeg command
         # part_idx bắt đầu từ 1 → nhãn tập hiển thị góc trên trái
-        episode_label = f"Tập {part_idx}"
         subtitle_path = escape_filter_path(srt_file)
+        video_filters = [
+            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}",
+        ]
+
+        if add_episode_label:
+            episode_label = f"Tập {part_idx}"
+            video_filters.extend(
+                [
+                    (
+                        f"drawtext=text='{episode_label}':"
+                        f"font='Roboto Bold':"
+                        f"fontsize=130:"
+                        f"fontcolor=white@0.15:"
+                        f"borderw=10:"
+                        f"bordercolor=white@0.5:"
+                        f"x=36:y=36"
+                    ),
+                    (
+                        f"drawtext=text='{episode_label}':"
+                        f"font='Roboto Bold':"
+                        f"fontsize=130:"
+                        f"fontcolor=white:"
+                        f"borderw=5:"
+                        f"bordercolor=black:"
+                        f"shadowcolor=black@0.35:"
+                        f"shadowx=2:"
+                        f"shadowy=2:"
+                        f"x=36:y=36"
+                    ),
+                ]
+            )
+
+        video_filters.append(
+            f"subtitles='{subtitle_path}':"
+            f"force_style='FontName=Roboto,FontSize=26,Bold=1,"
+            f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
+            f"Outline=3,Shadow=1,MarginV=30'"
+        )
+
         filter_complex = (
             # =========================
             # VIDEO CHÍNH
             # =========================
             f"[0:v]"
-            f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
-
-            # LỚP 1: Glow hồng
-            f"drawtext=text='{episode_label}':"
-            f"font='Roboto Bold':"
-            f"fontsize=130:"
-            f"fontcolor=white@0.15:"
-            f"borderw=10:"
-            f"bordercolor=white@0.5:"
-            f"x=36:y=36,"
-
-            # LỚP 2: Chữ chính
-            f"drawtext=text='{episode_label}':"
-            f"font='Roboto Bold':"
-            f"fontsize=130:"
-            f"fontcolor=white:"
-            f"borderw=5:"
-            f"bordercolor=black:"
-            f"shadowcolor=black@0.35:"
-            f"shadowx=2:"
-            f"shadowy=2:"
-            f"x=36:y=36,"
-
-            # Subtitle
-            f"subtitles='{subtitle_path}':"
-            f"force_style='FontName=Roboto,FontSize=26,Bold=1,"
-            f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
-            f"Outline=3,Shadow=1,MarginV=30'"
-            f"[main];"
+            + ",".join(video_filters)
+            + f"[main];"
 
             # =========================
             # THUMBNAIL

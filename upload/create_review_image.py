@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -139,29 +138,53 @@ def create_episode_image(
 
 
 # ============================================================
+# HỎI CẤU HÌNH KHI CHẠY
+# ============================================================
+
+def ask_image_path(prompt):
+    while True:
+        value = input(prompt).strip().strip('"').strip("'")
+
+        if not value:
+            print("Trường này bắt buộc.")
+            continue
+
+        input_path = Path(value).expanduser()
+
+        if input_path.is_file():
+            return input_path
+
+        print(f"Không tìm thấy ảnh: {input_path}")
+
+
+def ask_episode_number(prompt):
+    while True:
+        value = input(prompt).strip()
+
+        try:
+            episode_number = int(value)
+        except ValueError:
+            print("Vui lòng nhập số nguyên.")
+            continue
+
+        if episode_number <= 0:
+            print("episode_number phải > 0")
+            continue
+
+        return episode_number
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main():
-    if len(sys.argv) != 3:
-        print(
-            f"Usage:\n"
-            f"  python {Path(sys.argv[0]).name} <image> <so_tap>\n\n"
-            f"Example:\n"
-            f"  python {Path(sys.argv[0]).name} thumbnail.jpeg 10"
-        )
-        sys.exit(1)
+    print()
+    print("CREATE REVIEW IMAGE")
+    print()
 
-    input_path = Path(sys.argv[1])
-    episode_count = int(sys.argv[2])
-
-    if not input_path.exists():
-        print(f"Không tìm thấy ảnh: {input_path}")
-        sys.exit(1)
-
-    if episode_count <= 0:
-        print("Số tập phải > 0")
-        sys.exit(1)
+    input_path = ask_image_path("Đường dẫn ảnh gốc: ")
+    episode_number = ask_episode_number("episode_number: ")
 
     # --------------------------------------------------------
     # Load source image
@@ -169,9 +192,10 @@ def main():
 
     source_image = Image.open(input_path)
 
-    print(f"Ảnh nguồn : {input_path}")
-    print(f"Kích thước: {source_image.size}")
-    print(f"Số tập    : {episode_count}")
+    print()
+    print(f"Ảnh nguồn       : {input_path}")
+    print(f"Kích thước      : {source_image.size}")
+    print(f"episode_number  : {episode_number}")
 
     # --------------------------------------------------------
     # Output directory
@@ -190,21 +214,18 @@ def main():
     # Generate
     # --------------------------------------------------------
 
-    for episode_number in range(1, episode_count + 1):
+    output_path = output_dir / f"tap_{episode_number}.jpeg"
 
-        output_path = output_dir / f"tap_{episode_number}.jpeg"
+    create_episode_image(
+        source_image=source_image,
+        episode_number=episode_number,
+        output_path=output_path,
+        font=font,
+    )
 
-        create_episode_image(
-            source_image=source_image,
-            episode_number=episode_number,
-            output_path=output_path,
-            font=font,
-        )
-
-        print(f"Đã tạo: {output_path}")
-
+    print(f"Đã tạo: {output_path}")
     print()
-    print(f"Hoàn thành! Đã tạo {episode_count} ảnh.")
+    print("Hoàn thành!")
     print(f"Thư mục: {output_dir.resolve()}")
 
 

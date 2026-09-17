@@ -1,4 +1,3 @@
-# có thể sửa thêm public, playlist, who can comment
 import os
 import re
 
@@ -12,16 +11,12 @@ from googleapiclient.http import MediaFileUpload
 # ============================================================
 
 SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload"
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
 ]
 
 # Thư mục chứa script hiện tại
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Thư mục chứa các video
-VIDEO_DIR = os.path.abspath(
-    os.path.join(BASE_DIR, "../stories/tn60")
-)
 
 # File title + description
 TITLE_DESCRIPTION_FILE = os.path.join(
@@ -41,20 +36,142 @@ CLIENT_SECRET_FILE = os.path.join(
     "client_secret.json"
 )
 
-# Upload từ Phần 4 đến Phần 34
-START_PART = 1
-END_PART = 2
-
 # YouTube category
 # 22 = People & Blogs
 CATEGORY_ID = "22"
 
 # private / unlisted / public
-PRIVACY_STATUS = "public"
+DEFAULT_PRIVACY_STATUS = "public"
 
-PLAYLIST_ID= "PLerSSQqUz9Wc"
+DEFAULT_PLAYLIST_ID = "PLerSSQqUz9Wc"
 
-SKIP_PARTS = []
+# YouTube Data API không hỗ trợ đặt "who can comment" khi upload.
+# Mặc định mong muốn: chỉ người đăng ký được bình luận.
+# Cần đặt sẵn trên YouTube Studio (Settings > Community).
+
+# ============================================================
+# HỎI CẤU HÌNH KHI CHẠY
+# ============================================================
+
+def ask_required(prompt):
+    while True:
+        value = input(prompt).strip()
+        if value:
+            return value
+        print("Trường này bắt buộc.")
+
+
+def ask_with_default(prompt, default):
+    value = input(prompt).strip()
+    if not value:
+        return default
+    return value
+
+
+def ask_int(prompt):
+    while True:
+        value = input(prompt).strip()
+        try:
+            return int(value)
+        except ValueError:
+            print("Vui lòng nhập số nguyên.")
+
+
+def ask_privacy(default=DEFAULT_PRIVACY_STATUS):
+    allowed = {"public", "unlisted", "private"}
+
+    while True:
+        value = input(
+            f"Privacy status [{default}] "
+            "(public / unlisted / private): "
+        ).strip().lower()
+
+        if not value:
+            return default
+
+        if value in allowed:
+            return value
+
+        print("Chỉ nhận: public / unlisted / private")
+
+
+def parse_skip_parts(text):
+    text = text.strip()
+
+    if not text:
+        return []
+
+    parts = []
+
+    for item in text.split(","):
+        item = item.strip()
+
+        if not item:
+            continue
+
+        parts.append(int(item))
+
+    return parts
+
+
+def prompt_upload_config():
+    print()
+    print("Nhập cấu hình upload:")
+    print()
+
+    story_id = ask_required(
+        "Mã truyện / thư mục video (ví dụ tn60): "
+    )
+
+    video_dir = os.path.abspath(
+        os.path.join(BASE_DIR, "../stories", story_id)
+    )
+
+    start_part = ask_int("Phần bắt đầu: ")
+    end_part = ask_int("Phần kết thúc: ")
+
+    while end_part < start_part:
+        print("Phần kết thúc phải >= phần bắt đầu.")
+        end_part = ask_int("Phần kết thúc: ")
+
+    while True:
+        skip_raw = input(
+            "Các phần bỏ qua (ví dụ 3,5,7; Enter = không skip): "
+        ).strip()
+
+        try:
+            skip_parts = parse_skip_parts(skip_raw)
+            break
+        except ValueError:
+            print("Vui lòng nhập các số, cách nhau bởi dấu phẩy.")
+
+    privacy_status = ask_privacy()
+
+    playlist_id = ask_with_default(
+        f"Playlist ID [{DEFAULT_PLAYLIST_ID}]: ",
+        DEFAULT_PLAYLIST_ID
+    )
+
+    description_story_name = ask_required(
+        "Tên truyện (description_story_name): "
+    )
+
+    author = ask_required("Tác giả: ")
+    genre = ask_required("Thể loại: ")
+
+    return {
+        "story_id": story_id,
+        "video_dir": video_dir,
+        "start_part": start_part,
+        "end_part": end_part,
+        "skip_parts": skip_parts,
+        "privacy_status": privacy_status,
+        "playlist_id": playlist_id,
+        "description_story_name": description_story_name,
+        "author": author,
+        "genre": genre,
+    }
+
 
 # ============================================================
 # AUTHENTICATION
@@ -326,28 +443,33 @@ def load_tags(file_path):
 # TẠO DESCRIPTION
 # ============================================================
 
-def build_description(story_description):
+def build_description(
+    story_description,
+    description_story_name,
+    author,
+    genre,
+    hash_tag,
+):
     """
     Tạo description hoàn chỉnh cho YouTube.
     """
 
-    return f"""🎧 Thập Niên 60: Làm Giàu, Dạy Con
-Mời các bạn cùng nghe bộ truyện Điền Văn - Ngôn Tình - Truyện Sủng - Xuyên Không siêu hay của tác giả Nam Phương Lệ Chi!
+    return f"""🎧 {description_story_name}
 
 🔥 **NỘI DUNG TẬP NÀY:**
 {story_description}
 ---
 
 📌 **THÔNG TIN TRUYỆN:**
-• Tác giả: Nam Phương Lệ Chi
-• Thể loại: Điền Văn, Ngôn Tình, Truyện Sủng, Xuyên Không
+• Tác giả: {author}
+• Thể loại: {genre}
 
 ---
 
 👍 Đừng quên **LIKE, SHARE** và **ĐĂNG KÝ KÊNH** để ủng hộ team và không bỏ lỡ các tập tiếp theo nhé!
 💬 Hãy để lại bình luận cảm nhận của bạn về truyện bên dưới nha!
 
-#thập-niên-60-làm-giàu-dạy-con, #thapnien60lamgiaudaycon, #xuyên-không-thập-niên-60, #xuyenkhongthapnien60
+{hash_tag}
 
 ---
 """
@@ -428,23 +550,22 @@ def upload_video(
     # ADD VIDEO VÀO PLAYLIST
     # ==========================================
 
-    # video_id = response["id"]
+    if playlist_id:
+        youtube.playlistItems().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "playlistId": playlist_id,
+                    "resourceId": {
+                        "kind": "youtube#video",
+                        "videoId": video_id
+                    }
+                }
+            }
+        ).execute()
 
-    # if playlist_id:
-    #     youtube.playlistItems().insert(
-    #         part="snippet",
-    #         body={
-    #             "snippet": {
-    #                 "playlistId": playlist_id,
-    #                 "resourceId": {
-    #                     "kind": "youtube#video",
-    #                     "videoId": video_id
-    #                 }
-    #             }
-    #         }
-    #     ).execute()
+        print(f"Added to playlist: {playlist_id}")
 
-    #     print(f"Added to playlist: {playlist_id}")
     return video_id
 
 
@@ -457,8 +578,20 @@ def main():
     print()
     print("=" * 70)
     print("UPLOAD YOUTUBE")
-    print("THIẾU GIA BỊ BỎ RƠI")
     print("=" * 70)
+
+    config = prompt_upload_config()
+
+    story_id = config["story_id"]
+    video_dir = config["video_dir"]
+    start_part = config["start_part"]
+    end_part = config["end_part"]
+    skip_parts = config["skip_parts"]
+    privacy_status = config["privacy_status"]
+    playlist_id = config["playlist_id"]
+    description_story_name = config["description_story_name"]
+    author = config["author"]
+    genre = config["genre"]
 
     # --------------------------------------------------------
     # Kiểm tra các file cần thiết
@@ -487,15 +620,15 @@ def main():
     # Kiểm tra thư mục video
     # --------------------------------------------------------
 
-    if not os.path.isdir(VIDEO_DIR):
+    if not os.path.isdir(video_dir):
 
         raise FileNotFoundError(
-            f"Không tìm thấy thư mục video:\n{VIDEO_DIR}"
+            f"Không tìm thấy thư mục video:\n{video_dir}"
         )
 
     print()
     print(f"Thư mục video:")
-    print(f"  {VIDEO_DIR}")
+    print(f"  {video_dir}")
 
     # --------------------------------------------------------
     # Đọc title + description
@@ -523,6 +656,10 @@ def main():
         TAGS_FILE
     )
 
+    hash_tag = ", ".join(
+        f"#{tag}" for tag in tags
+    )
+
     print(
         f"✓ Đã đọc {len(tags)} tags."
     )
@@ -537,11 +674,19 @@ def main():
     print("=" * 70)
 
     print(
-        f"Phần bắt đầu : {START_PART}"
+        f"Mã truyện     : {story_id}"
     )
 
     print(
-        f"Phần kết thúc : {END_PART}"
+        f"Phần bắt đầu : {start_part}"
+    )
+
+    print(
+        f"Phần kết thúc : {end_part}"
+    )
+
+    print(
+        f"Bỏ qua        : {skip_parts if skip_parts else 'không'}"
     )
 
     print(
@@ -549,7 +694,32 @@ def main():
     )
 
     print(
-        f"Privacy       : {PRIVACY_STATUS}"
+        f"Privacy       : {privacy_status}"
+    )
+
+    print(
+        f"Playlist ID   : {playlist_id}"
+    )
+
+    print(
+        f"Bình luận     : người đăng ký "
+        "(đặt trên YouTube Studio; API không hỗ trợ)"
+    )
+
+    print(
+        f"Tên truyện    : {description_story_name}"
+    )
+
+    print(
+        f"Tác giả       : {author}"
+    )
+
+    print(
+        f"Thể loại      : {genre}"
+    )
+
+    print(
+        f"Hash tag      : {hash_tag}"
     )
 
     print(
@@ -582,11 +752,11 @@ def main():
     # --------------------------------------------------------
 
     for part in range(
-        START_PART,
-        END_PART + 1
+        start_part,
+        end_part + 1
     ):
 
-        if part in SKIP_PARTS:
+        if part in skip_parts:
                 print(f"⏭️ PHẦN {part}: SKIP")
                 continue
         print()
@@ -600,12 +770,11 @@ def main():
         # ----------------------------------------------------
 
         video_filename = (
-            # f"tn60_0_234.mp4"
-            f"tn60_part{part}.mp4"
+            f"{story_id}_part{part}.mp4"
         )
 
         video_path = os.path.join(
-            VIDEO_DIR,
+            video_dir,
             video_filename
         )
 
@@ -670,7 +839,11 @@ def main():
         # ----------------------------------------------------
 
         description = build_description(
-            story_description
+            story_description,
+            description_story_name,
+            author,
+            genre,
+            hash_tag,
         )
 
         # ----------------------------------------------------
@@ -688,7 +861,7 @@ def main():
 
         print()
         print(f"  Privacy:")
-        print(f"    {PRIVACY_STATUS}")
+        print(f"    {privacy_status}")
 
         print()
         print(f"  Tags:")
@@ -707,8 +880,8 @@ def main():
                 description=description,
                 tags=tags,
                 category_id=CATEGORY_ID,
-                privacy_status=PRIVACY_STATUS,
-                playlist_id=PLAYLIST_ID   
+                privacy_status=privacy_status,
+                playlist_id=playlist_id 
             )
 
             success.append({
@@ -790,7 +963,7 @@ def main():
     # Tổng số
     # --------------------------------------------------------
 
-    total = END_PART - START_PART + 1
+    total = end_part - start_part + 1
 
     print()
     print(

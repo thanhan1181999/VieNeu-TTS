@@ -67,6 +67,7 @@ save_config() {
     GENERATE_AUDIO="$GENERATE_AUDIO" \
     CRAWLING_TITLE="$CRAWLING_TITLE" \
     GENERATE_VIDEO="$GENERATE_VIDEO" \
+    ADD_EPISODE_LABEL="$ADD_EPISODE_LABEL" \
     python3 -c "
 import json, os
 config = {
@@ -80,6 +81,7 @@ config = {
     'generate_audio': os.environ['GENERATE_AUDIO'] == 'true',
     'crawling_title': os.environ['CRAWLING_TITLE'] == 'true',
     'generate_video': os.environ['GENERATE_VIDEO'] == 'true',
+    'add_episode_label': os.environ['ADD_EPISODE_LABEL'] == 'true',
 }
 path = '''$file'''
 with open(path, 'w', encoding='utf-8') as f:
@@ -233,6 +235,17 @@ else
     NEED_MOVE_COVER=true
 fi
 
+ADD_EPISODE_LABEL=false
+if [ "$GENERATE_VIDEO" = true ]; then
+    DEFAULT_ADD_EPISODE_LABEL=true
+    if [ -f "$CONFIG_FILE" ]; then
+        DEFAULT_ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label true)
+    fi
+    ADD_EPISODE_LABEL=$(read_boolean "Add episode_label?" "$DEFAULT_ADD_EPISODE_LABEL")
+elif [ -f "$CONFIG_FILE" ]; then
+    ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label false)
+fi
+
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
 
 # Setup voice / cover only when needed (first run or missing files).
@@ -275,6 +288,7 @@ echo "Crawl & Clean        : $CRAWL_AND_CLEAN"
 echo "Generate Audio       : $GENERATE_AUDIO"
 echo "Crawling Title       : $CRAWLING_TITLE"
 echo "Generate Video       : $GENERATE_VIDEO"
+echo "Add episode_label    : $ADD_EPISODE_LABEL"
 echo "============================================================"
 
 echo ""
@@ -326,7 +340,7 @@ fi
 if [ "$GENERATE_VIDEO" = true ]; then
     echo ""
     echo "=== 5. Making Video ==="
-    caffeinate -i uv run python tts/make_video_ver4.py "$STORY" "$START" "$END"
+    caffeinate -i uv run python tts/make_video_ver4.py "$STORY" "$START" "$END" "$ADD_EPISODE_LABEL"
 else
     echo ""
     echo "=== 5. Making Video SKIPPED ==="
