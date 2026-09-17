@@ -306,7 +306,7 @@ function buildChapterUrl(baseUrl, chapter) {
         ? baseUrl.slice(0, -1)
         : baseUrl;
 
-    return `${cleanBaseUrl}/chuong-${chapter}/`;
+    return `${cleanBaseUrl}chuong-${chapter}/`;
 }
 
 

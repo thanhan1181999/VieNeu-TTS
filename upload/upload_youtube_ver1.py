@@ -20,7 +20,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Thư mục chứa các video
 VIDEO_DIR = os.path.abspath(
-    os.path.join(BASE_DIR, "../stories/truyen-001")
+    os.path.join(BASE_DIR, "../stories/tn60")
 )
 
 # File title + description
@@ -32,7 +32,7 @@ TITLE_DESCRIPTION_FILE = os.path.join(
 # File tags
 TAGS_FILE = os.path.join(
     BASE_DIR,
-    "thieu_gia_bi_bo_roi_tag.txt"
+    "tag.txt"
 )
 
 # File OAuth
@@ -42,8 +42,8 @@ CLIENT_SECRET_FILE = os.path.join(
 )
 
 # Upload từ Phần 4 đến Phần 34
-START_PART = 8
-END_PART = 34
+START_PART = 1
+END_PART = 2
 
 # YouTube category
 # 22 = People & Blogs
@@ -54,7 +54,7 @@ PRIVACY_STATUS = "public"
 
 PLAYLIST_ID= "PLerSSQqUz9Wc"
 
-SKIP_PARTS = [1,2,3,4,5,6,7,9,10,11,12,14,13,15,16,20,21]
+SKIP_PARTS = []
 
 # ============================================================
 # AUTHENTICATION
@@ -331,23 +331,23 @@ def build_description(story_description):
     Tạo description hoàn chỉnh cho YouTube.
     """
 
-    return f"""🎧 **Thiếu Gia Bị Bỏ Rơi**
-Mời các bạn cùng nghe bộ truyện Đô Thị - Tiên Hiệp - Trọng Sinh siêu hay của tác giả Nga Thị Lão Ngũ!
+    return f"""🎧 Thập Niên 60: Làm Giàu, Dạy Con
+Mời các bạn cùng nghe bộ truyện Điền Văn - Ngôn Tình - Truyện Sủng - Xuyên Không siêu hay của tác giả Nam Phương Lệ Chi!
 
 🔥 **NỘI DUNG TẬP NÀY:**
 {story_description}
 ---
 
 📌 **THÔNG TIN TRUYỆN:**
-• Tác giả: Nga Thị Lão Ngũ
-• Thể loại: Tiên Hiệp, Đô Thị, Trọng Sinh, Huyền Huyễn
+• Tác giả: Nam Phương Lệ Chi
+• Thể loại: Điền Văn, Ngôn Tình, Truyện Sủng, Xuyên Không
 
 ---
 
 👍 Đừng quên **LIKE, SHARE** và **ĐĂNG KÝ KÊNH** để ủng hộ team và không bỏ lỡ các tập tiếp theo nhé!
 💬 Hãy để lại bình luận cảm nhận của bạn về truyện bên dưới nha!
 
-#ThieuGiaBiBoRoi #AudioTruyen #TruyenTienHiep #TruyenDoThi #DiepMac #TruyenFull
+#thập-niên-60-làm-giàu-dạy-con, #thapnien60lamgiaudaycon, #xuyên-không-thập-niên-60, #xuyenkhongthapnien60
 
 ---
 """
@@ -600,7 +600,8 @@ def main():
         # ----------------------------------------------------
 
         video_filename = (
-            f"truyen-001_0_2271_part{part}.mp4"
+            # f"tn60_0_234.mp4"
+            f"tn60_part{part}.mp4"
         )
 
         video_path = os.path.join(

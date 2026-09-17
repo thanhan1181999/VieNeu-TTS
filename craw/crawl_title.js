@@ -174,7 +174,7 @@ function extractTitles(html, selector) {
     const $ = cheerio.load(html);
     const titles = [];
 
-    $(`${selector} li a`).each((_, element) => {
+    $(`${selector}`).each((_, element) => {
         const titleText = $(element).text().trim();
         if (titleText) {
             titles.push(titleText);

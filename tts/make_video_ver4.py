@@ -12,6 +12,7 @@ VIDEO_WIDTH = 1280
 VIDEO_HEIGHT = 720
 VIDEO_FPS = 1
 AUDIO_BITRATE = "128k"
+THUMBNAIL_PATH = "thumbnail.jpeg"
 
 # Giới hạn độ dài mỗi video: 11 giờ 30 phút = 41400 giây
 MAX_DURATION_SECONDS = (11 * 3600) + (30 * 60) 
@@ -236,27 +237,73 @@ def main():
         # part_idx bắt đầu từ 1 → nhãn tập hiển thị góc trên trái
         episode_label = f"Tập {part_idx}"
         subtitle_path = escape_filter_path(srt_file)
-        video_filter = (
+        filter_complex = (
+            # =========================
+            # VIDEO CHÍNH
+            # =========================
+            f"[0:v]"
             f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+
+            # LỚP 1: Glow hồng
             f"drawtext=text='{episode_label}':"
-            f"font='Roboto':fontsize=48:fontcolor=white:borderw=4:bordercolor=black:"
-            f"shadowcolor=black@0.6:shadowx=2:shadowy=2:"
-            f"x=36:y=28,"
+            f"font='Roboto Bold':"
+            f"fontsize=130:"
+            f"fontcolor=white@0.15:"
+            f"borderw=10:"
+            f"bordercolor=white@0.5:"
+            f"x=36:y=36,"
+
+            # LỚP 2: Chữ chính
+            f"drawtext=text='{episode_label}':"
+            f"font='Roboto Bold':"
+            f"fontsize=130:"
+            f"fontcolor=white:"
+            f"borderw=5:"
+            f"bordercolor=black:"
+            f"shadowcolor=black@0.35:"
+            f"shadowx=2:"
+            f"shadowy=2:"
+            f"x=36:y=36,"
+
+            # Subtitle
             f"subtitles='{subtitle_path}':"
             f"force_style='FontName=Roboto,FontSize=26,Bold=1,"
             f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
             f"Outline=3,Shadow=1,MarginV=30'"
+            f"[main];"
+
+            # =========================
+            # THUMBNAIL
+            # =========================
+            f"[2:v]"
+            f"scale=75:75"
+            f"[thumb];"
+
+            # Đặt thumbnail góc dưới bên phải
+            f"[main][thumb]"
+            f"overlay=W-w-30:H-h-30"
         )
+
+        thumbnail_args = [
+            "-loop", "1",
+            "-i", str(THUMBNAIL_PATH)
+        ]
 
         cmd_ffmpeg = [
             "ffmpeg", "-y",
+
             *img_args,
+
             "-f", "concat",
             "-safe", "0",
+
             "-i", str(concat_list),
-            "-map", "0:v:0",
-            "-map", "1:a:0",
-            "-vf", video_filter,
+
+            *thumbnail_args,
+
+            "-map", "0:v:0", # lấy video/hình ảnh từ Input 0
+            "-map", "1:a:0", # lấy audio từ Input 1
+            "-filter_complex", filter_complex,
             "-r", str(VIDEO_FPS),
             "-c:v", "libx264",
             "-preset", "medium",
