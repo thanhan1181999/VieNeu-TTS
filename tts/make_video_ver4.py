@@ -119,6 +119,70 @@ def covered_chapters_from_parts(complete_parts):
     return covered
 
 
+def list_numbered_wavs(audio_dir):
+    pattern = re.compile(r"^(\d+)\.wav$")
+    found = {}
+    for path in audio_dir.iterdir():
+        if not path.is_file():
+            continue
+        match = pattern.fullmatch(path.name)
+        if match:
+            found[int(match.group(1))] = path
+    return found
+
+
+def validate_audio_matches_titles(audio_dir, titles):
+    """
+    Tổng số file audio từ 0.wav đến file cuối phải bằng số dòng titles.txt.
+    Dãy audio phải liên tục, không được thiếu file ở giữa.
+    """
+    wavs = list_numbered_wavs(audio_dir)
+    title_count = len(titles)
+
+    print("\n=== Validate audio vs titles.txt ===")
+    print(f"  titles.txt lines : {title_count}")
+    print(f"  numbered .wav    : {len(wavs)}")
+
+    errors = []
+
+    if title_count == 0:
+        errors.append("titles.txt không có dòng nào.")
+
+    if 0 not in wavs:
+        errors.append("Thiếu 0.wav (file audio đầu).")
+
+    if not wavs:
+        errors.append("Không tìm thấy file audio dạng N.wav.")
+    else:
+        last = max(wavs)
+        expected_count = last + 1
+        missing = [n for n in range(0, last + 1) if n not in wavs]
+
+        print(f"  audio range      : 0.wav -> {last}.wav ({expected_count} file)")
+
+        if missing:
+            preview = ", ".join(f"{n}.wav" for n in missing[:20])
+            suffix = " ..." if len(missing) > 20 else ""
+            errors.append(
+                f"Thiếu {len(missing)} file audio trong dãy 0.wav -> {last}.wav: "
+                f"{preview}{suffix}"
+            )
+
+        if expected_count != title_count:
+            errors.append(
+                f"Số audio từ 0.wav đến {last}.wav ({expected_count}) "
+                f"khác số dòng titles.txt ({title_count})."
+            )
+
+    if errors:
+        print("\nERROR: Validate audio/titles failed.")
+        for item in errors:
+            print(f"  - {item}")
+        sys.exit(1)
+
+    print("  OK: số audio khớp số dòng titles.txt.")
+
+
 def ask_bool(prompt, default=True):
     suffix = " [Y/n]: " if default else " [y/N]: "
 
@@ -173,6 +237,11 @@ def main():
 
     with open(titles_file, "r", encoding="utf-8") as f:
         titles = [line.rstrip("\n\r") for line in f]
+
+    while titles and titles[-1] == "":
+        titles.pop()
+
+    validate_audio_matches_titles(audio_dir, titles)
 
     # Validate audio files existence
     missing_wav_files = []

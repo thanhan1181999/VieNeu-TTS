@@ -138,6 +138,7 @@ Các file WAV phải cùng channels / sample width / sample rate.
 
 - Độ phân giải `1280x720`, encode ảnh tĩnh (`libx264` + AAC `128k`)
 - Phụ đề lấy từ tiêu đề từng chương trong `titles.txt` (chữ trắng, phía dưới)
+- Trước khi tạo video, kiểm tra số file từ `0.wav` đến file wav số lớn nhất phải bằng số dòng `titles.txt`. Không khớp thì dừng với lỗi validate
 - Nếu tổng thời lượng **> 11 giờ 30 phút** thì tự tách thành nhiều phần
   - Tên file luôn là `<story_id>_partN.mp4`
   - Không tạo lại part đã có; lần sau đánh số tiếp từ part còn thiếu
