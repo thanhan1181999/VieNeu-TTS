@@ -43,41 +43,11 @@ Mở Terminal và thực thi lệnh sau:
 - **Lần đầu** (truyện mới): nhập đầy đủ URL, selector, voice, cover, …
 - **Lần sau**: chỉ cần `Story` + khoảng chương + chọn bước chạy; cấu hình nằm trong `stories/<Story>/config.json`
 
-bước 5: ghép text truyện thành từng phần txt giống các phần trong video, upload lên notebookLM
-uv run python upload/concat_story.py
+Khi bật **Generate Video** và **Upload YouTube**, script sẽ:
 
-bước 6: để upload video lên youtube, chuẩn bị title và description cho mỗi video đã tạo, xác định tags dùng chung cho tất cả video 
-lên notebookLM gõ promt theo ví dụ
+- Tạo video `stories/<Story>/<Story>_partN.mp4` (không tạo lại part đã có)
+- Hỏi title / description / tags / tác giả / … **một lần**, lưu vào `config.json`
+- Upload các part chưa có trong `stories/<Story>/upload_log.json`
+- Dùng `thumbnail.jpeg` ở thư mục gốc làm thumbnail YouTube
 
-promt ví dụ: 
-```
-bối cảnh: hiện tại mình muốn đăng video audio truyện lên youtube
-yêu cầu 1: với mỗi phần truyện, hãy gợi ý mình cách điền thông tin title và descrition một cách hấp dẫn người nghe nhất (tức là với x phần thì có x title và x description)
-format file title_and_desscription có dạng:
-Tập 1: xxx
-Tiêu đề YouTube: AUDIO Truyện Dị Giới | xxx
-Mô tả (Description): xxx
-
-Tập 2: xxx
-Tiêu đề YouTube: AUDIO Truyện Dị Giới | xxx
-Mô tả (Description): xxx
-
-Tập 3: xxx
-Tiêu đề YouTube: AUDIO Truyện Dị Giới | xxx
-Mô tả (Description): xxx
-
-Tập 4: xxx
-Tiêu đề YouTube: AUDIO Truyện Dị Giới | xxx
-Mô tả (Description): xxx
-
-yêu cầu 2: tạo các tag cần đánh vào các video để thu hút nhiều người hơn
-format file tag có dạng
-#tag_1, #tag_2, ...
-```
-
-bước 7: chạy file upload_youtube.py
-trước khi chạy cần đổi tên các file mp4 (xoá thông tin chương ở giữa)
-
-bước 8: chuẩn bị 1 ảnh bìa chính, chạy script để tạo ảnh bìa cho mỗi video
-
-bước 9: thêm tay thủ công ảnh thumbnail + tạo playlist
+Chi tiết: [run_interact_with_user.vi.md](./run_interact_with_user.vi.md) / [run_interact_with_user.ja.md](./run_interact_with_user.ja.md)

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 import subprocess
 import wave
@@ -74,6 +75,48 @@ def parse_bool_arg(value):
     if normalized in ("false", "no", "n", "0"):
         return False
     raise ValueError(f"Invalid boolean value: {value}")
+
+
+def part_video_name(story_id, part_num):
+    return f"{story_id}_part{part_num}.mp4"
+
+
+def discover_complete_parts(story_dir, story_id):
+    """Tìm các part đã tạo xong (có cả .mp4 và .json metadata)."""
+    pattern = re.compile(rf"^{re.escape(story_id)}_part(\d+)\.mp4$")
+    complete = {}
+
+    for video_path in story_dir.glob(f"{story_id}_part*.mp4"):
+        match = pattern.fullmatch(video_path.name)
+        if not match:
+            continue
+
+        part_num = int(match.group(1))
+        meta_path = video_path.with_suffix(".json")
+        if not meta_path.is_file():
+            print(
+                f"WARNING: {video_path.name} chưa có file metadata; "
+                "coi như chưa tạo xong."
+            )
+            continue
+
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+
+        complete[part_num] = meta
+
+    return complete
+
+
+def covered_chapters_from_parts(complete_parts):
+    covered = set()
+    for meta in complete_parts.values():
+        first_ch = meta.get("first_ch")
+        last_ch = meta.get("last_ch")
+        if first_ch is None or last_ch is None:
+            continue
+        covered.update(range(int(first_ch), int(last_ch) + 1))
+    return covered
 
 
 def ask_bool(prompt, default=True):
@@ -169,6 +212,37 @@ def main():
         print("ERROR: No WAV files found in the requested chapter range.")
         sys.exit(1)
 
+    complete_parts = discover_complete_parts(story_dir, story_id)
+    if complete_parts:
+        print("\n=== Existing complete parts ===")
+        for part_num in sorted(complete_parts):
+            meta = complete_parts[part_num]
+            print(
+                f"  Part {part_num}: {meta.get('video')} "
+                f"chapters {meta.get('first_ch')}-{meta.get('last_ch')}"
+            )
+
+    covered = covered_chapters_from_parts(complete_parts)
+    skipped_chapters = [item for item in chapters if item["ch"] in covered]
+    chapters = [item for item in chapters if item["ch"] not in covered]
+
+    if skipped_chapters:
+        skipped_ids = ", ".join(str(item["ch"]) for item in skipped_chapters)
+        print(
+            f"\nSkip {len(skipped_chapters)} chapter(s) already in existing parts: "
+            f"{skipped_ids}"
+        )
+
+    if not chapters:
+        print(
+            "\nAll requested chapters already have part videos. "
+            "Nothing to generate."
+        )
+        sys.exit(0)
+
+    next_part = (max(complete_parts) if complete_parts else 0) + 1
+    print(f"Next part number: {next_part}")
+
     # Validate audio format consistency across all files
     reference = chapters[0]["info"]
     mismatches = []
@@ -224,22 +298,29 @@ def main():
     # Process each part and generate corresponding video file
     parts_meta = []
 
-    for part_idx, part_chapters in enumerate(parts, start=1):
+    for offset, part_chapters in enumerate(parts):
+        part_idx = next_part + offset
         first_ch = part_chapters[0]["ch"]
         last_ch = part_chapters[-1]["ch"]
-
-        if len(parts) == 1:
-            output_file = story_dir / f"{story_id}_{start_ch}_{end_ch}.mp4"
-        else:
-            output_file = story_dir / f"{story_id}_part{part_idx}.mp4"
+        output_file = story_dir / part_video_name(story_id, part_idx)
 
         concat_list = story_dir / f"concat_list_p{part_idx}.txt"
         # Giữ cùng tên với video để dễ đối chiếu sau này
         srt_file = output_file.with_suffix(".srt")
         meta_file = output_file.with_suffix(".json")
 
+        if output_file.exists() and meta_file.exists():
+            print(f"\nSKIP existing complete part: {output_file.name}")
+            with open(meta_file, encoding="utf-8") as f_meta:
+                parts_meta.append(json.load(f_meta))
+            continue
+
         print(f"\n==========================================")
-        print(f"Processing Part {part_idx}/{len(parts)} (Chapters {first_ch} to {last_ch})")
+        print(
+            f"Processing Part {part_idx} "
+            f"({offset + 1}/{len(parts)} this run, "
+            f"Chapters {first_ch} to {last_ch})"
+        )
         print(f"Output: {output_file.name}")
         print(f"==========================================")
 

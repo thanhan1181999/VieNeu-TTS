@@ -1,6 +1,6 @@
 # Hướng dẫn dùng `run_interact_with_user.sh`
 
-Script chạy tương tác, tự động hóa chuỗi xử lý: crawl truyện → làm sạch text → tạo TTS → crawl tiêu đề chương → tạo video.
+Script chạy tương tác, tự động hóa chuỗi xử lý: crawl truyện → làm sạch text → tạo TTS → crawl tiêu đề chương → tạo video → upload YouTube.
 
 Nên chạy từ **thư mục gốc của repository**.
 
@@ -44,6 +44,21 @@ Tiếp theo, chọn có chạy từng bước hay không (`Y/n`):
 | `Generate Audio?` | Yes | `tts/make_audio.py` |
 | `Crawling Title?` | Yes | `crawl_title.js` |
 | `Generate Video?` | Yes | `tts/make_video_ver4.py` |
+| `Add episode_label?` | Yes | Vẽ chữ «Tập N» góc trên trái (chỉ hỏi khi Generate Video = Yes) |
+| `Upload YouTube?` | Yes | `upload/upload_youtube_ver1.py` (chỉ hỏi khi Generate Video = Yes) |
+
+Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới đây, script hỏi thêm một lần rồi lưu; lần sau không hỏi lại.
+
+| Mục | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|
+| `YouTube title` | Có | — | Dùng chung cho mọi video; cuối title thêm ` ( Phần N)` |
+| `YouTube description` | Có | — | Dùng chung cho mọi video; nhét vào template có sẵn (nhiều dòng, Ctrl+D để xong) |
+| `Tên truyện (description_story_name)` | Có | — | Tên truyện ở đầu description |
+| `Tác giả` | Có | — | Tác giả |
+| `Thể loại` | Có | — | Thể loại |
+| `Tags` | Có | — | Phân tách bằng dấu phẩy (`#` tùy chọn) |
+| `Playlist ID` | Không | `PLerSSQqUz9Wc` | Playlist sẽ gắn video |
+| `Privacy status` | Không | `public` | `public` / `unlisted` / `private` |
 
 ---
 
@@ -55,7 +70,9 @@ Tiếp theo, chọn có chạy từng bước hay không (`Y/n`):
 | `Start chapter` / `End chapter` | Khoảng chương lần này |
 | Bật/tắt từng bước | Mặc định theo lần trước; Enter để giữ nguyên |
 
-URL, selector, cover, voice được lấy từ `config.json` / file có sẵn — không hỏi lại.
+URL, selector, cover, voice, title / description / tags YouTube lấy từ `config.json` — không hỏi lại.
+
+Nếu `Generate Video?` = No thì **không upload**, kể cả khi folder đã có mp4.
 
 ---
 
@@ -72,7 +89,17 @@ URL, selector, cover, voice được lấy từ `config.json` / file có sẵn �
   "crawl_and_clean": true,
   "generate_audio": true,
   "crawling_title": true,
-  "generate_video": true
+  "generate_video": true,
+  "add_episode_label": true,
+  "upload_youtube": true,
+  "youtube_title": "AUDIO Truyện Dị Giới | Example",
+  "youtube_description": "Đoạn giới thiệu truyện",
+  "description_story_name": "Example",
+  "author": "Tên tác giả",
+  "genre": "Thể loại",
+  "tags": "#tag1, #tag2",
+  "playlist_id": "PLerSSQqUz9Wc",
+  "privacy_status": "public"
 }
 ```
 
@@ -112,6 +139,38 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 ---
 
+## Cách tạo video theo part
+
+`tts/make_video_ver4.py` gom chương thành từng part sao cho không vượt khoảng 11 giờ 30 phút.
+
+- Tên file luôn là `stories/<Story>/<Story>_partN.mp4`
+- Part đã tạo xong (có cả `.mp4` và `.json`) **không tạo lại**
+- Lần chạy sau chỉ xử lý chương chưa có trong part cũ, đánh số tiếp từ part tiếp theo
+
+---
+
+## Upload YouTube
+
+Bước 6 chỉ chạy khi cả `Generate Video` và `Upload YouTube` đều Yes.
+
+- Gọi `upload/upload_youtube_ver1.py --story "$STORY"`
+- Quét mọi file `<Story>_partN.mp4` trong `stories/<Story>/`
+- Title giống nhau, chỉ khác hậu tố ` ( Phần N)`
+- Description giống nhau cho mọi video (template + đoạn mô tả hỏi lúc đầu)
+- Thumbnail **luôn** lấy `thumbnail.jpeg` ở thư mục gốc repo
+- Part đã đăng được ghi vào `stories/<Story>/upload_log.json`; lần sau bỏ qua
+- Một tập lỗi thì vẫn tiếp tục các tập còn lại
+
+Chạy độc lập:
+
+```bash
+uv run python upload/upload_youtube_ver1.py --story <Story>
+```
+
+Nếu `config.json` thiếu trường, script hỏi bổ sung rồi lưu. Cần có `upload/client_secret.json` cho OAuth.
+
+---
+
 ## Ví dụ nhập
 
 ### Lần đầu
@@ -130,6 +189,17 @@ Crawl & Clean? [Y/n]:
 Generate Audio? [Y/n]:
 Crawling Title? [Y/n]:
 Generate Video? [Y/n]:
+Add episode_label? [Y/n]:
+Upload YouTube? [Y/n]:
+YouTube title: AUDIO Truyện Dị Giới | Example
+YouTube description:
+(Enter xuống dòng, Ctrl+D để hoàn tất)
+Tên truyện (description_story_name): Example
+Tác giả: Tên tác giả
+Thể loại: Tiên hiệp
+Tags (phân tách bằng dấu phẩy): #tag1, #tag2
+Playlist ID [PLerSSQqUz9Wc]:
+Privacy status [public] (public / unlisted / private):
 ```
 
 ### Lần 2 trở đi
@@ -146,6 +216,8 @@ Crawl & Clean? [Y/n]:
 Generate Audio? [Y/n]:
 Crawling Title? [Y/n]:
 Generate Video? [Y/n]:
+Add episode_label? [Y/n]:
+Upload YouTube? [Y/n]:
 ```
 
 Khi nội dung và tiêu đề dùng cùng URL:
@@ -179,6 +251,12 @@ node craw/crawl_title.js \
   --selector "$CRAW_TITLE_SELECTOR"
 ```
 
+Upload YouTube:
+
+```bash
+uv run python upload/upload_youtube_ver1.py --story "$STORY"
+```
+
 ---
 
 ## Lưu ý
@@ -187,3 +265,5 @@ node craw/crawl_title.js \
 - Không ghi đè `stories/<Story>/voice/reference.wav` hoặc `cover.*` nếu đã tồn tại
 - `0.txt` (phần giới thiệu) chỉ hỏi nhập lần đầu khi chưa có file
 - Chế độ rút gọn yêu cầu đã có `cover.*` và `voice/reference.wav`
+- Khi upload, cần có `thumbnail.jpeg` ở thư mục gốc repo
+- Giới hạn bình luận (chỉ người đăng ký) đặt trên YouTube Studio; API không hỗ trợ

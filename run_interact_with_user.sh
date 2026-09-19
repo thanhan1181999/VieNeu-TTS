@@ -9,6 +9,9 @@ echo ""
 DEFAULT_CRAW_SELECTOR="#chapter-c"
 DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
+DEFAULT_PLAYLIST_ID="PLerSSQqUz9Wc"
+DEFAULT_PRIVACY_STATUS="public"
+DEFAULT_THUMBNAIL_PATH="thumbnail.jpeg"
 
 read_required() {
     local prompt="$1" value
@@ -29,6 +32,31 @@ read_boolean() {
             "") echo "$default"; return;;
             *) echo "Please enter y/yes or n/no." >&2;;
         esac
+    done
+}
+
+read_privacy() {
+    local default="${1:-$DEFAULT_PRIVACY_STATUS}" value
+    while true; do
+        read -r -p "Privacy status [$default] (public / unlisted / private): " value
+        value="${value:-$default}"
+        case "$value" in
+            public|unlisted|private) echo "$value"; return;;
+            *) echo "Chỉ nhận: public / unlisted / private" >&2;;
+        esac
+    done
+}
+
+read_multiline_required() {
+    local prompt="$1" value
+    while true; do
+        echo "$prompt" >&2
+        echo "(Enter xuống dòng, Ctrl+D để hoàn tất)" >&2
+        value=$(cat)
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        [ -n "$value" ] && printf '%s' "$value" && return
+        echo "This field is required." >&2
     done
 }
 
@@ -68,9 +96,26 @@ save_config() {
     CRAWLING_TITLE="$CRAWLING_TITLE" \
     GENERATE_VIDEO="$GENERATE_VIDEO" \
     ADD_EPISODE_LABEL="$ADD_EPISODE_LABEL" \
+    UPLOAD_YOUTUBE="$UPLOAD_YOUTUBE" \
+    YOUTUBE_TITLE="${YOUTUBE_TITLE-}" \
+    YOUTUBE_DESCRIPTION="${YOUTUBE_DESCRIPTION-}" \
+    DESCRIPTION_STORY_NAME="${DESCRIPTION_STORY_NAME-}" \
+    AUTHOR="${AUTHOR-}" \
+    GENRE="${GENRE-}" \
+    PLAYLIST_ID="${PLAYLIST_ID-}" \
+    PRIVACY_STATUS="${PRIVACY_STATUS-}" \
+    TAGS="${TAGS-}" \
+    SAVE_YOUTUBE_DESCRIPTION="${SAVE_YOUTUBE_DESCRIPTION:-false}" \
     python3 -c "
 import json, os
-config = {
+
+path = '''$file'''
+config = {}
+if os.path.isfile(path):
+    with open(path, encoding='utf-8') as f:
+        config = json.load(f)
+
+config.update({
     'content_url': os.environ['CONTENT_URL'],
     'title_url': os.environ['TITLE_URL'],
     'crawl_selector': os.environ['CRAW_SELECTOR'],
@@ -82,8 +127,26 @@ config = {
     'crawling_title': os.environ['CRAWLING_TITLE'] == 'true',
     'generate_video': os.environ['GENERATE_VIDEO'] == 'true',
     'add_episode_label': os.environ['ADD_EPISODE_LABEL'] == 'true',
+    'upload_youtube': os.environ.get('UPLOAD_YOUTUBE', 'false') == 'true',
+})
+
+optional = {
+    'youtube_title': 'YOUTUBE_TITLE',
+    'description_story_name': 'DESCRIPTION_STORY_NAME',
+    'author': 'AUTHOR',
+    'genre': 'GENRE',
+    'playlist_id': 'PLAYLIST_ID',
+    'privacy_status': 'PRIVACY_STATUS',
+    'tags': 'TAGS',
 }
-path = '''$file'''
+for json_key, env_key in optional.items():
+    value = os.environ.get(env_key, '')
+    if value:
+        config[json_key] = value
+
+if os.environ.get('SAVE_YOUTUBE_DESCRIPTION') == 'true':
+    config['youtube_description'] = os.environ.get('YOUTUBE_DESCRIPTION', '')
+
 with open(path, 'w', encoding='utf-8') as f:
     json.dump(config, f, ensure_ascii=False, indent=2)
     f.write('\n')
@@ -236,14 +299,67 @@ else
 fi
 
 ADD_EPISODE_LABEL=false
+UPLOAD_YOUTUBE=false
+YOUTUBE_TITLE=""
+YOUTUBE_DESCRIPTION=""
+DESCRIPTION_STORY_NAME=""
+AUTHOR=""
+GENRE=""
+PLAYLIST_ID=""
+PRIVACY_STATUS=""
+TAGS=""
+SAVE_YOUTUBE_DESCRIPTION=false
+EXISTING_YOUTUBE_DESCRIPTION=""
+
 if [ "$GENERATE_VIDEO" = true ]; then
     DEFAULT_ADD_EPISODE_LABEL=true
+    DEFAULT_UPLOAD_YOUTUBE=true
     if [ -f "$CONFIG_FILE" ]; then
         DEFAULT_ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label true)
+        DEFAULT_UPLOAD_YOUTUBE=$(load_config_value "$CONFIG_FILE" upload_youtube true)
+        YOUTUBE_TITLE=$(load_config_value "$CONFIG_FILE" youtube_title)
+        DESCRIPTION_STORY_NAME=$(load_config_value "$CONFIG_FILE" description_story_name)
+        AUTHOR=$(load_config_value "$CONFIG_FILE" author)
+        GENRE=$(load_config_value "$CONFIG_FILE" genre)
+        PLAYLIST_ID=$(load_config_value "$CONFIG_FILE" playlist_id)
+        PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
+        TAGS=$(load_config_value "$CONFIG_FILE" tags)
+        EXISTING_YOUTUBE_DESCRIPTION=$(load_config_value "$CONFIG_FILE" youtube_description)
+    else
+        EXISTING_YOUTUBE_DESCRIPTION=""
     fi
+
     ADD_EPISODE_LABEL=$(read_boolean "Add episode_label?" "$DEFAULT_ADD_EPISODE_LABEL")
+    UPLOAD_YOUTUBE=$(read_boolean "Upload YouTube?" "$DEFAULT_UPLOAD_YOUTUBE")
+
+    if [ "$UPLOAD_YOUTUBE" = true ]; then
+        [ -z "$YOUTUBE_TITLE" ] && YOUTUBE_TITLE=$(read_required "YouTube title: ")
+        if [ -z "$EXISTING_YOUTUBE_DESCRIPTION" ]; then
+            YOUTUBE_DESCRIPTION=$(read_multiline_required "YouTube description:")
+            SAVE_YOUTUBE_DESCRIPTION=true
+        fi
+        [ -z "$DESCRIPTION_STORY_NAME" ] && DESCRIPTION_STORY_NAME=$(read_required "Tên truyện (description_story_name): ")
+        [ -z "$AUTHOR" ] && AUTHOR=$(read_required "Tác giả: ")
+        [ -z "$GENRE" ] && GENRE=$(read_required "Thể loại: ")
+        [ -z "$TAGS" ] && TAGS=$(read_required "Tags (phân tách bằng dấu phẩy): ")
+        if [ -z "$PLAYLIST_ID" ]; then
+            read -r -p "Playlist ID [$DEFAULT_PLAYLIST_ID]: " PLAYLIST_ID
+            PLAYLIST_ID="${PLAYLIST_ID:-$DEFAULT_PLAYLIST_ID}"
+        fi
+        if [ -z "$PRIVACY_STATUS" ]; then
+            PRIVACY_STATUS=$(read_privacy "$DEFAULT_PRIVACY_STATUS")
+        fi
+    fi
 elif [ -f "$CONFIG_FILE" ]; then
     ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label false)
+    UPLOAD_YOUTUBE=$(load_config_value "$CONFIG_FILE" upload_youtube false)
+    YOUTUBE_TITLE=$(load_config_value "$CONFIG_FILE" youtube_title)
+    DESCRIPTION_STORY_NAME=$(load_config_value "$CONFIG_FILE" description_story_name)
+    AUTHOR=$(load_config_value "$CONFIG_FILE" author)
+    GENRE=$(load_config_value "$CONFIG_FILE" genre)
+    PLAYLIST_ID=$(load_config_value "$CONFIG_FILE" playlist_id)
+    PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
+    TAGS=$(load_config_value "$CONFIG_FILE" tags)
 fi
 
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
@@ -289,6 +405,17 @@ echo "Generate Audio       : $GENERATE_AUDIO"
 echo "Crawling Title       : $CRAWLING_TITLE"
 echo "Generate Video       : $GENERATE_VIDEO"
 echo "Add episode_label    : $ADD_EPISODE_LABEL"
+echo "Upload YouTube       : $UPLOAD_YOUTUBE"
+if [ "$UPLOAD_YOUTUBE" = true ]; then
+    echo "YouTube title        : $YOUTUBE_TITLE"
+    echo "Tên truyện           : $DESCRIPTION_STORY_NAME"
+    echo "Tác giả              : $AUTHOR"
+    echo "Thể loại             : $GENRE"
+    echo "Tags                 : $TAGS"
+    echo "Playlist ID          : $PLAYLIST_ID"
+    echo "Privacy              : $PRIVACY_STATUS"
+    echo "Thumbnail            : $DEFAULT_THUMBNAIL_PATH"
+fi
 echo "============================================================"
 
 echo ""
@@ -344,6 +471,19 @@ if [ "$GENERATE_VIDEO" = true ]; then
 else
     echo ""
     echo "=== 5. Making Video SKIPPED ==="
+fi
+
+if [ "$GENERATE_VIDEO" = true ] && [ "$UPLOAD_YOUTUBE" = true ]; then
+    echo ""
+    echo "=== 6. Uploading YouTube ==="
+    if [ ! -f "$DEFAULT_THUMBNAIL_PATH" ]; then
+        echo "ERROR: Thumbnail not found: $DEFAULT_THUMBNAIL_PATH"
+        exit 1
+    fi
+    caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY"
+else
+    echo ""
+    echo "=== 6. Uploading YouTube SKIPPED ==="
 fi
 
 echo ""

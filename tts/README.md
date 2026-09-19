@@ -139,8 +139,8 @@ Các file WAV phải cùng channels / sample width / sample rate.
 - Độ phân giải `1280x720`, encode ảnh tĩnh (`libx264` + AAC `128k`)
 - Phụ đề lấy từ tiêu đề từng chương trong `titles.txt` (chữ trắng, phía dưới)
 - Nếu tổng thời lượng **> 11 giờ 30 phút** thì tự tách thành nhiều phần
-  - Một phần: `<story_id>_<start>_<end>.mp4`
-  - Nhiều phần: `<story_id>_<first>_<last>_partN.mp4`
+  - Tên file luôn là `<story_id>_partN.mp4`
+  - Không tạo lại part đã có; lần sau đánh số tiếp từ part còn thiếu
 - File tạm (concat list / SRT) được xóa sau khi xong
 
 ### Phụ thuộc
