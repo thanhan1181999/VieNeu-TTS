@@ -305,7 +305,7 @@ def main():
             )
 
         video_filters.append(
-            f"subtitles='{subtitle_path}':"
+            f"subtitles=filename='{subtitle_path}':"
             f"force_style='FontName=Roboto,FontSize=26,Bold=1,"
             f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,"
             f"Outline=3,Shadow=1,MarginV=30'"
