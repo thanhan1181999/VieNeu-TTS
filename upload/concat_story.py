@@ -70,7 +70,7 @@ def merge_files(ranges, output_dir):
 
         with open(output_filename, 'w', encoding='utf-8') as outfile:
             for chap in range(start_chap, end_chap + 1):
-                input_filename = f"stories/tn60/script/{chap}.txt"
+                input_filename = f"stories/qbcc/script/{chap}.txt"
 
                 if os.path.exists(input_filename):
                     with open(input_filename, 'r', encoding='utf-8') as infile:

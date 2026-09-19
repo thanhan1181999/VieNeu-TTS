@@ -231,7 +231,7 @@ def main():
         if len(parts) == 1:
             output_file = story_dir / f"{story_id}_{start_ch}_{end_ch}.mp4"
         else:
-            output_file = story_dir / f"{story_id}_{first_ch}_{last_ch}_part{part_idx}.mp4"
+            output_file = story_dir / f"{story_id}_part{part_idx}.mp4"
 
         concat_list = story_dir / f"concat_list_p{part_idx}.txt"
         # Giữ cùng tên với video để dễ đối chiếu sau này
