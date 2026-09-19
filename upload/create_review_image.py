@@ -10,11 +10,20 @@ from PIL import Image, ImageDraw, ImageFont
 
 FONT_SIZE = 130
 
-X = 36
-Y = 36
+MARGIN_X = 36
+MARGIN_Y = 36
 
-# Font Roboto Bold
-FONT_PATH = "/Users/a.nguyen/projects/vieneu-test/VieNeu-TTS/upload/DroidSans-Bold.ttf"
+POSITION_TOP_LEFT = "top_left"
+POSITION_MIDDLE_LEFT = "middle_left"
+POSITION_BOTTOM_LEFT = "bottom_left"
+DEFAULT_POSITION = POSITION_TOP_LEFT
+VALID_POSITIONS = (
+    POSITION_TOP_LEFT,
+    POSITION_MIDDLE_LEFT,
+    POSITION_BOTTOM_LEFT,
+)
+
+FONT_PATH = str(Path(__file__).resolve().parent / "DroidSans-Bold.ttf")
 
 
 # ============================================================
@@ -31,6 +40,50 @@ def load_font(size):
     return ImageFont.truetype(FONT_PATH, size)
 
 
+def normalize_position(position):
+    aliases = {
+        "1": POSITION_TOP_LEFT,
+        "top": POSITION_TOP_LEFT,
+        "top_left": POSITION_TOP_LEFT,
+        "top-left": POSITION_TOP_LEFT,
+        "2": POSITION_MIDDLE_LEFT,
+        "middle": POSITION_MIDDLE_LEFT,
+        "middle_left": POSITION_MIDDLE_LEFT,
+        "middle-left": POSITION_MIDDLE_LEFT,
+        "center_left": POSITION_MIDDLE_LEFT,
+        "3": POSITION_BOTTOM_LEFT,
+        "bottom": POSITION_BOTTOM_LEFT,
+        "bottom_left": POSITION_BOTTOM_LEFT,
+        "bottom-left": POSITION_BOTTOM_LEFT,
+    }
+    key = str(position or "").strip().lower()
+    if key in aliases:
+        return aliases[key]
+    raise ValueError(
+        "Vị trí không hợp lệ. Chỉ nhận: "
+        "top_left / middle_left / bottom_left"
+    )
+
+
+def label_xy(image_size, font, text, position=DEFAULT_POSITION):
+    """Tọa độ vẽ chữ Tập N: luôn mép trái, đổi theo trên / giữa / dưới."""
+    _width, height = image_size
+    dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = dummy.textbbox((0, 0), text, font=font, stroke_width=10)
+    text_h = bbox[3] - bbox[1]
+    x = MARGIN_X
+    pos = normalize_position(position)
+
+    if pos == POSITION_MIDDLE_LEFT:
+        y = max(0, (height - text_h) // 2)
+    elif pos == POSITION_BOTTOM_LEFT:
+        y = max(0, height - text_h - MARGIN_Y)
+    else:
+        y = MARGIN_Y
+
+    return x, y
+
+
 # ============================================================
 # CREATE ONE IMAGE
 # ============================================================
@@ -40,12 +93,12 @@ def create_episode_image(
     episode_number: int,
     output_path: Path,
     font: ImageFont.FreeTypeFont,
+    position=DEFAULT_POSITION,
 ):
     image = source_image.copy()
 
-    draw = ImageDraw.Draw(image)
-
     episode_label = f"Tập {episode_number}"
+    x, y = label_xy(image.size, font, episode_label, position)
 
     # ========================================================
     # LỚP 1: Glow
@@ -67,7 +120,7 @@ def create_episode_image(
     glow_draw = ImageDraw.Draw(glow_layer)
 
     glow_draw.text(
-        (X, Y),
+        (x, y),
         episode_label,
         font=font,
         fill=(255, 255, 255, int(255 * 0.15)),
@@ -101,7 +154,7 @@ def create_episode_image(
 
     # Shadow
     main_draw.text(
-        (X + 2, Y + 2),
+        (x + 2, y + 2),
         episode_label,
         font=font,
         fill=(0, 0, 0, int(255 * 0.35)),
@@ -111,7 +164,7 @@ def create_episode_image(
 
     # Chữ chính
     main_draw.text(
-        (X, Y),
+        (x, y),
         episode_label,
         font=font,
         fill=(255, 255, 255, 255),
@@ -157,6 +210,23 @@ def ask_image_path(prompt):
         print(f"Không tìm thấy ảnh: {input_path}")
 
 
+def ask_position(default=DEFAULT_POSITION):
+    default = normalize_position(default)
+    print("Vị trí chữ Tập N:")
+    print("  1) top_left     (phía trên bên trái)")
+    print("  2) middle_left  (phía giữa bên trái)")
+    print("  3) bottom_left  (phía dưới bên trái)")
+
+    while True:
+        value = input(f"Chọn [1/2/3, mặc định {default}]: ").strip()
+        if not value:
+            return default
+        try:
+            return normalize_position(value)
+        except ValueError as exc:
+            print(exc)
+
+
 def ask_episode_number(prompt):
     while True:
         value = input(prompt).strip()
@@ -185,6 +255,7 @@ def main():
 
     input_path = ask_image_path("Đường dẫn ảnh gốc: ")
     episode_number = ask_episode_number("episode_number: ")
+    position = ask_position()
 
     # --------------------------------------------------------
     # Load source image
@@ -196,6 +267,7 @@ def main():
     print(f"Ảnh nguồn       : {input_path}")
     print(f"Kích thước      : {source_image.size}")
     print(f"episode_number  : {episode_number}")
+    print(f"position        : {position}")
 
     # --------------------------------------------------------
     # Output directory
@@ -221,6 +293,7 @@ def main():
         episode_number=episode_number,
         output_path=output_path,
         font=font,
+        position=position,
     )
 
     print(f"Đã tạo: {output_path}")

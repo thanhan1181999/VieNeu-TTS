@@ -11,6 +11,7 @@ DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
 DEFAULT_PLAYLIST_ID="PLerSSQqUz9Wc"
 DEFAULT_PRIVACY_STATUS="public"
+DEFAULT_REVIEW_LABEL_POSITION="top_left"
 
 read_required() {
     local prompt="$1" value
@@ -56,6 +57,24 @@ read_existing_file() {
             return
         fi
         echo "ERROR: File not found: $value" >&2
+    done
+}
+
+read_label_position() {
+    local default="${1:-$DEFAULT_REVIEW_LABEL_POSITION}" value
+    echo "Vị trí chữ Tập N trên review image:" >&2
+    echo "  1) top_left     (phía trên bên trái)" >&2
+    echo "  2) middle_left  (phía giữa bên trái)" >&2
+    echo "  3) bottom_left  (phía dưới bên trái)" >&2
+    while true; do
+        read -r -p "Chọn [1/2/3, mặc định $default]: " value
+        [ -z "$value" ] && value="$default"
+        case "$value" in
+            1|top_left|top) echo top_left; return;;
+            2|middle_left|middle) echo middle_left; return;;
+            3|bottom_left|bottom) echo bottom_left; return;;
+            *) echo "Chỉ nhận: 1/2/3 hoặc top_left / middle_left / bottom_left" >&2;;
+        esac
     done
 }
 
@@ -118,6 +137,7 @@ save_config() {
     PRIVACY_STATUS="${PRIVACY_STATUS-}" \
     TAGS="${TAGS-}" \
     THUMBNAIL_PATH="${THUMBNAIL_PATH-}" \
+    REVIEW_LABEL_POSITION="${REVIEW_LABEL_POSITION-}" \
     SAVE_YOUTUBE_DESCRIPTION="${SAVE_YOUTUBE_DESCRIPTION:-false}" \
     python3 -c "
 import json, os
@@ -152,6 +172,7 @@ optional = {
     'privacy_status': 'PRIVACY_STATUS',
     'tags': 'TAGS',
     'thumbnail_path': 'THUMBNAIL_PATH',
+    'review_label_position': 'REVIEW_LABEL_POSITION',
 }
 for json_key, env_key in optional.items():
     value = os.environ.get(env_key, '')
@@ -323,6 +344,7 @@ PLAYLIST_ID=""
 PRIVACY_STATUS=""
 TAGS=""
 THUMBNAIL_PATH=""
+REVIEW_LABEL_POSITION=""
 SAVE_YOUTUBE_DESCRIPTION=false
 EXISTING_YOUTUBE_DESCRIPTION=""
 
@@ -340,6 +362,7 @@ if [ "$GENERATE_VIDEO" = true ]; then
         PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
         TAGS=$(load_config_value "$CONFIG_FILE" tags)
         THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
+        REVIEW_LABEL_POSITION=$(load_config_value "$CONFIG_FILE" review_label_position)
         EXISTING_YOUTUBE_DESCRIPTION=$(load_config_value "$CONFIG_FILE" youtube_description)
     else
         EXISTING_YOUTUBE_DESCRIPTION=""
@@ -372,6 +395,9 @@ if [ "$GENERATE_VIDEO" = true ]; then
             fi
             THUMBNAIL_PATH=$(read_existing_file "Thumbnail path" "$DEFAULT_STORY_THUMBNAIL")
         fi
+        if [ -z "$REVIEW_LABEL_POSITION" ]; then
+            REVIEW_LABEL_POSITION=$(read_label_position "$DEFAULT_REVIEW_LABEL_POSITION")
+        fi
     fi
 elif [ -f "$CONFIG_FILE" ]; then
     ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label false)
@@ -384,6 +410,7 @@ elif [ -f "$CONFIG_FILE" ]; then
     PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
     TAGS=$(load_config_value "$CONFIG_FILE" tags)
     THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
+    REVIEW_LABEL_POSITION=$(load_config_value "$CONFIG_FILE" review_label_position)
 fi
 
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
@@ -439,6 +466,7 @@ if [ "$UPLOAD_YOUTUBE" = true ]; then
     echo "Playlist ID          : $PLAYLIST_ID"
     echo "Privacy              : $PRIVACY_STATUS"
     echo "Thumbnail            : $THUMBNAIL_PATH"
+    echo "Label position       : $REVIEW_LABEL_POSITION"
 fi
 echo "============================================================"
 
@@ -504,7 +532,7 @@ if [ "$GENERATE_VIDEO" = true ] && [ "$UPLOAD_YOUTUBE" = true ]; then
         echo "ERROR: Thumbnail not found: $THUMBNAIL_PATH"
         exit 1
     fi
-    caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"
+    caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"
 else
     echo ""
     echo "=== 6. Uploading YouTube SKIPPED ==="

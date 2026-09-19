@@ -60,6 +60,7 @@ Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới
 | `Playlist ID` | Không | `PLerSSQqUz9Wc` | Playlist sẽ gắn video |
 | `Privacy status` | Không | `public` | `public` / `unlisted` / `private` |
 | `Thumbnail path` | Không | `stories/<Story>/thumbnail.jpeg` | Ảnh thumbnail YouTube |
+| `Label position` | Không | `top_left` | Vị trí chữ «Tập N»: `top_left` / `middle_left` / `bottom_left` |
 
 ---
 
@@ -101,7 +102,8 @@ Nếu `Generate Video?` = No thì **không upload**, kể cả khi folder đã c
   "tags": "#tag1, #tag2",
   "playlist_id": "PLerSSQqUz9Wc",
   "privacy_status": "public",
-  "thumbnail_path": "stories/truyen-001/thumbnail.jpeg"
+  "thumbnail_path": "stories/truyen-001/thumbnail.jpeg",
+  "review_label_position": "top_left"
 }
 ```
 
@@ -155,11 +157,12 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 Bước 6 chỉ chạy khi cả `Generate Video` và `Upload YouTube` đều Yes.
 
-- Gọi `upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"`
+- Gọi `upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"`
 - Quét mọi file `<Story>_partN.mp4` trong `stories/<Story>/`
 - Title giống nhau, chỉ khác hậu tố ` ( Phần N)`
 - Description giống nhau cho mọi video (template + đoạn mô tả hỏi lúc đầu)
 - Thumbnail lấy đường dẫn hỏi lúc đầu (mặc định: `stories/<Story>/thumbnail.jpeg`)
+- Mỗi part được tạo `review_partN.jpeg` (chữ «Tập N») rồi dùng làm thumbnail YouTube. Vị trí chữ: `top_left` / `middle_left` / `bottom_left`
 - Part đã đăng được ghi vào `stories/<Story>/upload_log.json`; lần sau bỏ qua
 - Một tập lỗi thì vẫn tiếp tục các tập còn lại
 
@@ -203,6 +206,7 @@ Tags (phân tách bằng dấu phẩy): #tag1, #tag2
 Playlist ID [PLerSSQqUz9Wc]:
 Privacy status [public] (public / unlisted / private):
 Thumbnail path [stories/truyen-001/thumbnail.jpeg]:
+Chọn [1/2/3, mặc định top_left]:
 ```
 
 ### Lần 2 trở đi
@@ -257,7 +261,7 @@ node craw/crawl_title.js \
 Upload YouTube:
 
 ```bash
-uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"
+uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"
 ```
 
 ---

@@ -3,10 +3,21 @@ import json
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
+from PIL import Image
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+
+from create_review_image import (
+    DEFAULT_POSITION,
+    FONT_SIZE,
+    ask_position,
+    create_episode_image,
+    load_font,
+    normalize_position,
+)
 
 
 # ============================================================
@@ -47,6 +58,7 @@ CONFIG_KEYS = (
     "privacy_status",
     "tags",
     "thumbnail_path",
+    "review_label_position",
 )
 
 
@@ -212,6 +224,41 @@ def scan_part_videos(video_dir, story_id):
     return found
 
 
+def review_image_path(video_dir, part):
+    return os.path.join(video_dir, f"review_part{part}.jpeg")
+
+
+def create_review_images(source_thumbnail, video_dir, parts, position=DEFAULT_POSITION):
+    """
+    Tạo 1 ảnh review cho mỗi part từ thumbnail gốc,
+    overlay chữ Tập N giống create_review_image.py.
+    """
+    position = normalize_position(position)
+    print()
+    print("Tạo review image...")
+    print(f"  Ảnh nguồn : {source_thumbnail}")
+    print(f"  Số part   : {len(parts)}")
+    print(f"  Vị trí    : {position}")
+
+    source_image = Image.open(source_thumbnail)
+    font = load_font(FONT_SIZE)
+    outputs = {}
+
+    for part in parts:
+        output_path = review_image_path(video_dir, part)
+        create_episode_image(
+            source_image=source_image,
+            episode_number=part,
+            output_path=Path(output_path),
+            font=font,
+            position=position,
+        )
+        outputs[part] = output_path
+        print(f"  ✓ Part {part}: {output_path}")
+
+    return outputs
+
+
 def prompt_missing_upload_fields(config, story_id):
     updated = dict(config)
 
@@ -253,10 +300,21 @@ def prompt_missing_upload_fields(config, story_id):
             default_thumbnail_path(story_id)
         )
 
+    try:
+        updated["review_label_position"] = normalize_position(
+            updated.get("review_label_position", "")
+        )
+    except ValueError:
+        updated["review_label_position"] = ask_position(DEFAULT_POSITION)
+
     return updated
 
 
-def resolve_upload_config(story_id=None, thumbnail_path=None):
+def resolve_upload_config(
+    story_id=None,
+    thumbnail_path=None,
+    review_label_position=None,
+):
     if not story_id:
         story_id = ask_required(
             "Mã truyện / thư mục video (ví dụ tn60): "
@@ -267,6 +325,8 @@ def resolve_upload_config(story_id=None, thumbnail_path=None):
     config = dict(original_config)
     if thumbnail_path:
         config["thumbnail_path"] = thumbnail_path
+    if review_label_position:
+        config["review_label_position"] = review_label_position
     filled = prompt_missing_upload_fields(config, story_id)
 
     new_values = {
@@ -292,6 +352,7 @@ def resolve_upload_config(story_id=None, thumbnail_path=None):
         "privacy_status": filled["privacy_status"].strip().lower(),
         "tags": filled["tags"].strip(),
         "thumbnail_path": filled["thumbnail_path"].strip(),
+        "review_label_position": filled["review_label_position"],
     }
 
 
@@ -382,8 +443,9 @@ def parse_tags(content):
 # ============================================================
 
 def build_video_title(base_title, part):
+    prefix = f"TRUYỆN HAY | "
     suffix = f" ( Phần {part})"
-    title = f"{base_title}{suffix}"
+    title = f"{prefix}{base_title}{suffix}"
     if len(title) <= YOUTUBE_TITLE_MAX_LEN:
         return title
 
@@ -541,6 +603,14 @@ def parse_args():
         default="",
         help="Đường dẫn thumbnail (mặc định: stories/<story>/thumbnail.jpeg)",
     )
+    parser.add_argument(
+        "--label-position",
+        default="",
+        help=(
+            "Vị trí chữ Tập N trên review image: "
+            "top_left / middle_left / bottom_left"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -554,6 +624,7 @@ def main():
     config = resolve_upload_config(
         story_id=args.story.strip() or None,
         thumbnail_path=args.thumbnail.strip() or None,
+        review_label_position=args.label_position.strip() or None,
     )
 
     story_id = config["story_id"]
@@ -567,6 +638,7 @@ def main():
     youtube_title = config["youtube_title"]
     youtube_description = config["youtube_description"]
     thumbnail_path = os.path.abspath(config["thumbnail_path"])
+    review_label_position = config["review_label_position"]
 
     print()
     print("Kiểm tra file...")
@@ -593,6 +665,13 @@ def main():
         print()
         print(f"Không tìm thấy video dạng {story_id}_partN.mp4 để upload.")
         return
+
+    review_images = create_review_images(
+        source_thumbnail=thumbnail_path,
+        video_dir=video_dir,
+        parts=[part for part, _ in part_videos],
+        position=review_label_position,
+    )
 
     upload_log = load_upload_log(log_file)
     uploaded_parts = upload_log["parts"]
@@ -643,6 +722,11 @@ def main():
     print(f"Tác giả       : {author}")
     print(f"Thể loại      : {genre}")
     print(f"Thumbnail     : {thumbnail_path}")
+    print(f"Label position: {review_label_position}")
+    print(
+        f"Review images : {len(review_images)} file "
+        f"(review_partN.jpeg)"
+    )
     print(f"Hash tag      : {hash_tag}")
     print(f"Số tags       : {len(tags)}")
     print(f"Log           : {log_file}")
@@ -701,6 +785,9 @@ def main():
         print()
         print("  Tags:")
         print(f"    {len(tags)} tags")
+        print()
+        print("  Review image:")
+        print(f"    {review_images[part]}")
 
         try:
             video_id = upload_video(
@@ -712,7 +799,7 @@ def main():
                 category_id=CATEGORY_ID,
                 privacy_status=privacy_status,
                 playlist_id=playlist_id,
-                thumbnail_path=thumbnail_path,
+                thumbnail_path=review_images[part],
             )
             mark_part_uploaded(log_file, part, video_id, video_filename)
             success.append({
