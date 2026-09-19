@@ -48,6 +48,6 @@ Khi bật **Generate Video** và **Upload YouTube**, script sẽ:
 - Tạo video `stories/<Story>/<Story>_partN.mp4` (không tạo lại part đã có)
 - Hỏi title / description / tags / tác giả / … **một lần**, lưu vào `config.json`
 - Upload các part chưa có trong `stories/<Story>/upload_log.json`
-- Dùng `thumbnail.jpeg` ở thư mục gốc làm thumbnail YouTube
+- Dùng thumbnail YouTube theo đường dẫn nhập lúc upload (mặc định `stories/<Story>/thumbnail.jpeg`)
 
 Chi tiết: [run_interact_with_user.vi.md](./run_interact_with_user.vi.md) / [run_interact_with_user.ja.md](./run_interact_with_user.ja.md)

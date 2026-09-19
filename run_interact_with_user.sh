@@ -11,7 +11,6 @@ DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
 DEFAULT_PLAYLIST_ID="PLerSSQqUz9Wc"
 DEFAULT_PRIVACY_STATUS="public"
-DEFAULT_THUMBNAIL_PATH="thumbnail.jpeg"
 
 read_required() {
     local prompt="$1" value
@@ -44,6 +43,19 @@ read_privacy() {
             public|unlisted|private) echo "$value"; return;;
             *) echo "Chỉ nhận: public / unlisted / private" >&2;;
         esac
+    done
+}
+
+read_existing_file() {
+    local prompt="$1" default="$2" value
+    while true; do
+        read -r -p "$prompt [$default]: " value
+        value="${value:-$default}"
+        if [ -f "$value" ]; then
+            echo "$value"
+            return
+        fi
+        echo "ERROR: File not found: $value" >&2
     done
 }
 
@@ -105,6 +117,7 @@ save_config() {
     PLAYLIST_ID="${PLAYLIST_ID-}" \
     PRIVACY_STATUS="${PRIVACY_STATUS-}" \
     TAGS="${TAGS-}" \
+    THUMBNAIL_PATH="${THUMBNAIL_PATH-}" \
     SAVE_YOUTUBE_DESCRIPTION="${SAVE_YOUTUBE_DESCRIPTION:-false}" \
     python3 -c "
 import json, os
@@ -138,6 +151,7 @@ optional = {
     'playlist_id': 'PLAYLIST_ID',
     'privacy_status': 'PRIVACY_STATUS',
     'tags': 'TAGS',
+    'thumbnail_path': 'THUMBNAIL_PATH',
 }
 for json_key, env_key in optional.items():
     value = os.environ.get(env_key, '')
@@ -308,6 +322,7 @@ GENRE=""
 PLAYLIST_ID=""
 PRIVACY_STATUS=""
 TAGS=""
+THUMBNAIL_PATH=""
 SAVE_YOUTUBE_DESCRIPTION=false
 EXISTING_YOUTUBE_DESCRIPTION=""
 
@@ -324,6 +339,7 @@ if [ "$GENERATE_VIDEO" = true ]; then
         PLAYLIST_ID=$(load_config_value "$CONFIG_FILE" playlist_id)
         PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
         TAGS=$(load_config_value "$CONFIG_FILE" tags)
+        THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
         EXISTING_YOUTUBE_DESCRIPTION=$(load_config_value "$CONFIG_FILE" youtube_description)
     else
         EXISTING_YOUTUBE_DESCRIPTION=""
@@ -349,6 +365,13 @@ if [ "$GENERATE_VIDEO" = true ]; then
         if [ -z "$PRIVACY_STATUS" ]; then
             PRIVACY_STATUS=$(read_privacy "$DEFAULT_PRIVACY_STATUS")
         fi
+        DEFAULT_STORY_THUMBNAIL="stories/$STORY/thumbnail.jpeg"
+        if [ -z "$THUMBNAIL_PATH" ] || [ ! -f "$THUMBNAIL_PATH" ]; then
+            if [ -n "$THUMBNAIL_PATH" ]; then
+                echo "WARNING: Thumbnail not found: $THUMBNAIL_PATH" >&2
+            fi
+            THUMBNAIL_PATH=$(read_existing_file "Thumbnail path" "$DEFAULT_STORY_THUMBNAIL")
+        fi
     fi
 elif [ -f "$CONFIG_FILE" ]; then
     ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label false)
@@ -360,6 +383,7 @@ elif [ -f "$CONFIG_FILE" ]; then
     PLAYLIST_ID=$(load_config_value "$CONFIG_FILE" playlist_id)
     PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
     TAGS=$(load_config_value "$CONFIG_FILE" tags)
+    THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
 fi
 
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
@@ -414,7 +438,7 @@ if [ "$UPLOAD_YOUTUBE" = true ]; then
     echo "Tags                 : $TAGS"
     echo "Playlist ID          : $PLAYLIST_ID"
     echo "Privacy              : $PRIVACY_STATUS"
-    echo "Thumbnail            : $DEFAULT_THUMBNAIL_PATH"
+    echo "Thumbnail            : $THUMBNAIL_PATH"
 fi
 echo "============================================================"
 
@@ -476,11 +500,11 @@ fi
 if [ "$GENERATE_VIDEO" = true ] && [ "$UPLOAD_YOUTUBE" = true ]; then
     echo ""
     echo "=== 6. Uploading YouTube ==="
-    if [ ! -f "$DEFAULT_THUMBNAIL_PATH" ]; then
-        echo "ERROR: Thumbnail not found: $DEFAULT_THUMBNAIL_PATH"
+    if [ ! -f "$THUMBNAIL_PATH" ]; then
+        echo "ERROR: Thumbnail not found: $THUMBNAIL_PATH"
         exit 1
     fi
-    caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY"
+    caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"
 else
     echo ""
     echo "=== 6. Uploading YouTube SKIPPED ==="

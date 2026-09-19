@@ -59,6 +59,7 @@ Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới
 | `Tags` | Có | — | Phân tách bằng dấu phẩy (`#` tùy chọn) |
 | `Playlist ID` | Không | `PLerSSQqUz9Wc` | Playlist sẽ gắn video |
 | `Privacy status` | Không | `public` | `public` / `unlisted` / `private` |
+| `Thumbnail path` | Không | `stories/<Story>/thumbnail.jpeg` | Ảnh thumbnail YouTube |
 
 ---
 
@@ -99,7 +100,8 @@ Nếu `Generate Video?` = No thì **không upload**, kể cả khi folder đã c
   "genre": "Thể loại",
   "tags": "#tag1, #tag2",
   "playlist_id": "PLerSSQqUz9Wc",
-  "privacy_status": "public"
+  "privacy_status": "public",
+  "thumbnail_path": "stories/truyen-001/thumbnail.jpeg"
 }
 ```
 
@@ -153,11 +155,11 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 Bước 6 chỉ chạy khi cả `Generate Video` và `Upload YouTube` đều Yes.
 
-- Gọi `upload/upload_youtube_ver1.py --story "$STORY"`
+- Gọi `upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"`
 - Quét mọi file `<Story>_partN.mp4` trong `stories/<Story>/`
 - Title giống nhau, chỉ khác hậu tố ` ( Phần N)`
 - Description giống nhau cho mọi video (template + đoạn mô tả hỏi lúc đầu)
-- Thumbnail **luôn** lấy `thumbnail.jpeg` ở thư mục gốc repo
+- Thumbnail lấy đường dẫn hỏi lúc đầu (mặc định: `stories/<Story>/thumbnail.jpeg`)
 - Part đã đăng được ghi vào `stories/<Story>/upload_log.json`; lần sau bỏ qua
 - Một tập lỗi thì vẫn tiếp tục các tập còn lại
 
@@ -200,6 +202,7 @@ Thể loại: Tiên hiệp
 Tags (phân tách bằng dấu phẩy): #tag1, #tag2
 Playlist ID [PLerSSQqUz9Wc]:
 Privacy status [public] (public / unlisted / private):
+Thumbnail path [stories/truyen-001/thumbnail.jpeg]:
 ```
 
 ### Lần 2 trở đi
@@ -254,7 +257,7 @@ node craw/crawl_title.js \
 Upload YouTube:
 
 ```bash
-uv run python upload/upload_youtube_ver1.py --story "$STORY"
+uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH"
 ```
 
 ---
@@ -265,5 +268,5 @@ uv run python upload/upload_youtube_ver1.py --story "$STORY"
 - Không ghi đè `stories/<Story>/voice/reference.wav` hoặc `cover.*` nếu đã tồn tại
 - `0.txt` (phần giới thiệu) chỉ hỏi nhập lần đầu khi chưa có file
 - Chế độ rút gọn yêu cầu đã có `cover.*` và `voice/reference.wav`
-- Khi upload, cần có `thumbnail.jpeg` ở thư mục gốc repo
+- Khi upload cần file thumbnail; mặc định là `stories/<Story>/thumbnail.jpeg`
 - Giới hạn bình luận (chỉ người đăng ký) đặt trên YouTube Studio; API không hỗ trợ

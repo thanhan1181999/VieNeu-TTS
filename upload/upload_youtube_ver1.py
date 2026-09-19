@@ -22,7 +22,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 
 CLIENT_SECRET_FILE = os.path.join(BASE_DIR, "client_secret.json")
-DEFAULT_THUMBNAIL_FILE = os.path.join(REPO_ROOT, "thumbnail.jpeg")
 
 # YouTube category
 # 22 = People & Blogs
@@ -47,6 +46,7 @@ CONFIG_KEYS = (
     "playlist_id",
     "privacy_status",
     "tags",
+    "thumbnail_path",
 )
 
 
@@ -67,6 +67,21 @@ def ask_with_default(prompt, default):
     if not value:
         return default
     return value
+
+
+def default_thumbnail_path(story_id):
+    return os.path.join(REPO_ROOT, "stories", story_id, "thumbnail.jpeg")
+
+
+def ask_thumbnail(default):
+    while True:
+        value = ask_with_default(
+            f"Thumbnail path [{default}]: ",
+            default,
+        )
+        if os.path.isfile(value):
+            return value
+        print(f"Không tìm thấy file: {value}")
 
 
 def ask_privacy(default=DEFAULT_PRIVACY_STATUS):
@@ -197,7 +212,7 @@ def scan_part_videos(video_dir, story_id):
     return found
 
 
-def prompt_missing_upload_fields(config):
+def prompt_missing_upload_fields(config, story_id):
     updated = dict(config)
 
     if not str(updated.get("youtube_title", "")).strip():
@@ -232,23 +247,32 @@ def prompt_missing_upload_fields(config):
     if privacy not in {"public", "unlisted", "private"}:
         updated["privacy_status"] = ask_privacy()
 
+    thumbnail = str(updated.get("thumbnail_path", "")).strip()
+    if not thumbnail or not os.path.isfile(thumbnail):
+        updated["thumbnail_path"] = ask_thumbnail(
+            default_thumbnail_path(story_id)
+        )
+
     return updated
 
 
-def resolve_upload_config(story_id=None):
+def resolve_upload_config(story_id=None, thumbnail_path=None):
     if not story_id:
         story_id = ask_required(
             "Mã truyện / thư mục video (ví dụ tn60): "
         )
 
     paths = story_paths(story_id)
-    config = load_story_config(paths["config_file"])
-    filled = prompt_missing_upload_fields(config)
+    original_config = load_story_config(paths["config_file"])
+    config = dict(original_config)
+    if thumbnail_path:
+        config["thumbnail_path"] = thumbnail_path
+    filled = prompt_missing_upload_fields(config, story_id)
 
     new_values = {
         key: filled[key]
         for key in CONFIG_KEYS
-        if filled.get(key) != config.get(key)
+        if filled.get(key) != original_config.get(key)
     }
     if new_values:
         merge_story_config(paths["config_file"], new_values)
@@ -267,6 +291,7 @@ def resolve_upload_config(story_id=None):
         "playlist_id": filled["playlist_id"].strip(),
         "privacy_status": filled["privacy_status"].strip().lower(),
         "tags": filled["tags"].strip(),
+        "thumbnail_path": filled["thumbnail_path"].strip(),
     }
 
 
@@ -513,8 +538,8 @@ def parse_args():
     )
     parser.add_argument(
         "--thumbnail",
-        default=DEFAULT_THUMBNAIL_FILE,
-        help="Đường dẫn thumbnail (mặc định: thumbnail.jpeg ở thư mục gốc)",
+        default="",
+        help="Đường dẫn thumbnail (mặc định: stories/<story>/thumbnail.jpeg)",
     )
     return parser.parse_args()
 
@@ -526,7 +551,10 @@ def main():
     print("=" * 70)
 
     args = parse_args()
-    config = resolve_upload_config(story_id=args.story.strip() or None)
+    config = resolve_upload_config(
+        story_id=args.story.strip() or None,
+        thumbnail_path=args.thumbnail.strip() or None,
+    )
 
     story_id = config["story_id"]
     video_dir = config["video_dir"]
@@ -538,7 +566,7 @@ def main():
     genre = config["genre"]
     youtube_title = config["youtube_title"]
     youtube_description = config["youtube_description"]
-    thumbnail_path = os.path.abspath(args.thumbnail)
+    thumbnail_path = os.path.abspath(config["thumbnail_path"])
 
     print()
     print("Kiểm tra file...")
