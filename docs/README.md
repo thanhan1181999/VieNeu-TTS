@@ -24,6 +24,10 @@ Chi tiết tham số: [run_interact_with_user.vi.md](./run_interact_with_user.vi
 1. Sử dụng **ChatGPT** hoặc **Gemini** để tạo ảnh minh họa phù hợp với cốt truyện.
    * **Prompt gợi ý:**
      > *"Mình đang muốn tạo 1 ảnh làm avatar/thumbnail cho video audio truyện: [DÁN_LINK_TRUYỆN]. Hãy ghi thêm vào trong ảnh 1 câu ngắn thu hút người xem nhé."*
+     > *"Mình đang muốn tạo 1 câu hook thu hút người xem nhất để đặt làm tile cho video audio truyện này. Hãy gợi ý cho mình câu hook sao cho >=70 ký tự và <=79 ký tự nhé.>."*
+     > *"Mình đang muốn tạo description để làm mô tả cho video audio truyện này. Hãy gợi ý cho mình đoạn mô tả hấp dẫn nhất nhé.>."*
+     > *"Mình đang muốn tạo tag cho video audio truyện này để được đề xuất đến nhiều người xem hơn. Hãy gợi ý cho mình các tab, bắt đầu bởi #, các nhau dấu phẩy nhé.>."*
+     > *"Mình đang muốn thêm phần giới thiệu chèn vào đầu video audio truyện này để thu hút người xem nhất. Hãy gợi ý cho mình.>."*
 2. Tải ảnh về máy tính.
    * **Output:** Đường dẫn lưu file ảnh trên máy local *(Ví dụ: `/path/to/cover.jpg`)*
 

@@ -23,3 +23,8 @@ merged_models_cache/
 stories**
 
 upload/**.txt
+
+upload/client_secret.json
+
+info.txt
+stream.sh
