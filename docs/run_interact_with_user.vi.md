@@ -175,7 +175,7 @@ Chạy độc lập:
 uv run python upload/upload_youtube_ver1.py --story <Story>
 ```
 
-Nếu `config.json` thiếu trường, script hỏi bổ sung rồi lưu. Cần có `upload/client_secret.json` cho OAuth.
+Nếu `config.json` thiếu trường, script hỏi bổ sung rồi lưu. Cần có `upload/client_secret.json` cho OAuth. Lần đầu mở trình duyệt xác thực, lưu token vào `upload/token.json`; lần sau dùng lại và tự refresh.
 
 ---
 

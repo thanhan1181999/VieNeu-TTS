@@ -7,6 +7,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -34,6 +37,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 
 CLIENT_SECRET_FILE = os.path.join(BASE_DIR, "client_secret.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
 
 # YouTube category
 # 22 = People & Blogs
@@ -421,23 +425,67 @@ def resolve_upload_config(
 # AUTHENTICATION
 # ============================================================
 
-def get_authenticated_service():
-    """
-    Đăng nhập YouTube một lần.
-    Service này sẽ được dùng cho toàn bộ các video.
-    """
+def _save_credentials(credentials):
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        f.write(credentials.to_json())
+    try:
+        os.chmod(TOKEN_FILE, 0o600)
+    except OSError:
+        pass
 
+
+def _load_saved_credentials():
+    if not os.path.isfile(TOKEN_FILE):
+        return None
+    try:
+        credentials = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    except (ValueError, OSError) as exc:
+        print(f"  Không đọc được token đã lưu ({exc}). Sẽ xác thực lại.")
+        return None
+    granted = set(credentials.scopes or [])
+    if granted and not set(SCOPES).issubset(granted):
+        print("  Token không đủ quyền (scopes). Sẽ xác thực lại.")
+        return None
+    return credentials
+
+
+def _run_oauth_flow():
+    print("  Mở trình duyệt để xác thực Google...")
     flow = InstalledAppFlow.from_client_secrets_file(
         CLIENT_SECRET_FILE,
-        SCOPES
+        SCOPES,
     )
+    credentials = flow.run_local_server(port=0, prompt="consent")
+    _save_credentials(credentials)
+    print(f"  ✓ Đã lưu token: {TOKEN_FILE}")
+    return credentials
 
-    credentials = flow.run_local_server(port=0)
+
+def get_authenticated_service():
+    """
+    Đăng nhập YouTube. Lần đầu mở trình duyệt, sau đó dùng token đã lưu.
+    Access token hết hạn được refresh tự động, không cần xác thực lại.
+    """
+    credentials = _load_saved_credentials()
+
+    if credentials and credentials.valid:
+        print(f"  ✓ Dùng token đã lưu: {TOKEN_FILE}")
+    elif credentials and credentials.expired and credentials.refresh_token:
+        print("  Token hết hạn, đang refresh...")
+        try:
+            credentials.refresh(Request())
+            _save_credentials(credentials)
+            print(f"  ✓ Đã refresh token: {TOKEN_FILE}")
+        except RefreshError:
+            print("  Refresh thất bại, cần xác thực lại trên trình duyệt.")
+            credentials = _run_oauth_flow()
+    else:
+        credentials = _run_oauth_flow()
 
     return build(
         "youtube",
         "v3",
-        credentials=credentials
+        credentials=credentials,
     )
 
 
