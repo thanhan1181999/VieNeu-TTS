@@ -577,7 +577,7 @@ def build_description(
 
     return f"""🎧 {description_story_name}
 
-🔥 **NỘI DUNG TẬP NÀY:**
+🔥 **NỘI DUNG:**
 {story_description}
 ---
 
