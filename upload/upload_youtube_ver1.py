@@ -2,8 +2,9 @@ import argparse
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from PIL import Image
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -38,8 +39,12 @@ CLIENT_SECRET_FILE = os.path.join(BASE_DIR, "client_secret.json")
 # 22 = People & Blogs
 CATEGORY_ID = "22"
 
-DEFAULT_PRIVACY_STATUS = "public"
+# YouTube chỉ cho đặt publishAt khi privacyStatus = private.
+# Đến giờ hẹn, YouTube tự chuyển video sang public.
+DEFAULT_PRIVACY_STATUS = "private"
 DEFAULT_PLAYLIST_ID = "PLerSSQqUz9Wc"
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+PUBLISH_HOUR_VN = 20
 
 # YouTube Data API không hỗ trợ đặt "who can comment" khi upload.
 # Mặc định mong muốn: chỉ người đăng ký được bình luận.
@@ -94,24 +99,6 @@ def ask_thumbnail(default):
         if os.path.isfile(value):
             return value
         print(f"Không tìm thấy file: {value}")
-
-
-def ask_privacy(default=DEFAULT_PRIVACY_STATUS):
-    allowed = {"public", "unlisted", "private"}
-
-    while True:
-        value = input(
-            f"Privacy status [{default}] "
-            "(public / unlisted / private): "
-        ).strip().lower()
-
-        if not value:
-            return default
-
-        if value in allowed:
-            return value
-
-        print("Chỉ nhận: public / unlisted / private")
 
 
 def ask_multiline(prompt):
@@ -189,17 +176,93 @@ def load_upload_log(log_file):
     return {"parts": normalized}
 
 
-def mark_part_uploaded(log_file, part, video_id, filename):
+def mark_part_uploaded(log_file, part, video_id, filename, publish_at=None):
     log = load_upload_log(log_file)
-    log["parts"][str(part)] = {
+    entry = {
         "part": part,
         "video_id": video_id,
         "url": f"https://www.youtube.com/watch?v={video_id}",
         "filename": filename,
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
+    if publish_at is not None:
+        entry["publish_at"] = publish_at.isoformat()
+    log["parts"][str(part)] = entry
     save_json_file(log_file, log)
     return log
+
+
+def parse_publish_at(value):
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(VN_TZ)
+
+
+def latest_scheduled_publish(upload_log):
+    latest = None
+    parts = upload_log.get("parts", {}) if isinstance(upload_log, dict) else {}
+    for item in parts.values():
+        if not isinstance(item, dict):
+            continue
+        scheduled = parse_publish_at(item.get("publish_at"))
+        if scheduled is None:
+            continue
+        if latest is None or scheduled > latest:
+            latest = scheduled
+    return latest
+
+
+def first_available_publish_at(now=None, after=None):
+    """
+    Slot 20:00 giờ Việt Nam sớm nhất còn ở tương lai.
+    Nếu after có giá trị, slot phải sau after đúng ít nhất 1 ngày (cùng giờ 20:00).
+    """
+    now = now or datetime.now(VN_TZ)
+    slot = now.replace(
+        hour=PUBLISH_HOUR_VN,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    if now >= slot:
+        slot += timedelta(days=1)
+
+    if after is not None:
+        after_local = after.astimezone(VN_TZ)
+        next_after = after_local.replace(
+            hour=PUBLISH_HOUR_VN,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ) + timedelta(days=1)
+        if next_after > slot:
+            slot = next_after
+
+    return slot
+
+
+def schedule_pending_parts(pending_parts, upload_log):
+    after = latest_scheduled_publish(upload_log)
+    scheduled = {}
+    for part, _video_path in pending_parts:
+        slot = first_available_publish_at(after=after)
+        scheduled[part] = slot
+        after = slot
+    return scheduled
+
+
+def format_vn_publish_time(dt):
+    return dt.astimezone(VN_TZ).strftime("%H:%M %d/%m/%Y")
+
+
+def youtube_publish_at(dt):
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def scan_part_videos(video_dir, story_id):
@@ -290,9 +353,7 @@ def prompt_missing_upload_fields(config, story_id):
             DEFAULT_PLAYLIST_ID,
         )
 
-    privacy = str(updated.get("privacy_status", "")).strip().lower()
-    if privacy not in {"public", "unlisted", "private"}:
-        updated["privacy_status"] = ask_privacy()
+    updated["privacy_status"] = DEFAULT_PRIVACY_STATUS
 
     thumbnail = str(updated.get("thumbnail_path", "")).strip()
     if not thumbnail or not os.path.isfile(thumbnail):
@@ -507,12 +568,22 @@ def upload_video(
     tags,
     category_id="22",
     privacy_status="private",
+    publish_at=None,
     playlist_id=None,
     thumbnail_path=None,
 ):
     """
     Upload một video lên YouTube.
+    Có publish_at thì video ở private và được lên lịch công khai.
     """
+
+    status = {
+        "privacyStatus": privacy_status,
+        "selfDeclaredMadeForKids": False,
+    }
+    if publish_at is not None:
+        status["privacyStatus"] = "private"
+        status["publishAt"] = youtube_publish_at(publish_at)
 
     body = {
         "snippet": {
@@ -521,11 +592,7 @@ def upload_video(
             "tags": tags,
             "categoryId": category_id
         },
-
-        "status": {
-            "privacyStatus": privacy_status,
-            "selfDeclaredMadeForKids": False
-        }
+        "status": status,
     }
 
     media = MediaFileUpload(
@@ -558,6 +625,11 @@ def upload_video(
     print("✅ Upload thành công!")
     print(f"   Video ID: {video_id}")
     print(f"   URL: https://www.youtube.com/watch?v={video_id}")
+    if publish_at is not None:
+        print(
+            f"   Lên lịch công khai: "
+            f"{format_vn_publish_time(publish_at)} giờ VN"
+        )
 
     if playlist_id:
         youtube.playlistItems().insert(
@@ -684,6 +756,8 @@ def main():
             continue
         pending.append((part, video_path))
 
+    publish_schedule = schedule_pending_parts(pending, upload_log)
+
     print()
     print("Đang đọc tags...")
     tags = parse_tags(config["tags"])
@@ -711,7 +785,19 @@ def main():
         f"Sẽ upload     : {', '.join(str(part) for part, _ in pending) if pending else 'không'}"
     )
     print(f"Category ID   : {CATEGORY_ID}")
-    print(f"Privacy       : {privacy_status}")
+    print(f"Privacy       : {privacy_status} (lên lịch công khai)")
+    print(
+        f"Giờ đăng      : {PUBLISH_HOUR_VN:02d}:00 giờ Việt Nam, "
+        "mỗi tập cách 1 ngày"
+    )
+    if publish_schedule:
+        print("Lịch publish  :")
+        for part, _video_path in pending:
+            print(
+                f"  Phần {part}: "
+                f"{format_vn_publish_time(publish_schedule[part])} "
+                "(giờ VN)"
+            )
     print(f"Playlist ID   : {playlist_id}")
     print(
         "Bình luận     : người đăng ký "
@@ -783,6 +869,12 @@ def main():
         print("  Privacy:")
         print(f"    {privacy_status}")
         print()
+        print("  Publish at:")
+        print(
+            f"    {format_vn_publish_time(publish_schedule[part])} "
+            "(giờ VN)"
+        )
+        print()
         print("  Tags:")
         print(f"    {len(tags)} tags")
         print()
@@ -790,6 +882,7 @@ def main():
         print(f"    {review_images[part]}")
 
         try:
+            publish_at = publish_schedule[part]
             video_id = upload_video(
                 youtube=youtube,
                 file_path=video_path,
@@ -798,13 +891,21 @@ def main():
                 tags=tags,
                 category_id=CATEGORY_ID,
                 privacy_status=privacy_status,
+                publish_at=publish_at,
                 playlist_id=playlist_id,
                 thumbnail_path=review_images[part],
             )
-            mark_part_uploaded(log_file, part, video_id, video_filename)
+            mark_part_uploaded(
+                log_file,
+                part,
+                video_id,
+                video_filename,
+                publish_at=publish_at,
+            )
             success.append({
                 "part": part,
                 "video_id": video_id,
+                "publish_at": publish_at,
             })
         except Exception as e:
             print()
@@ -826,9 +927,16 @@ def main():
     print(f"✅ Thành công: {len(success)} phần")
     if success:
         for item in success:
+            scheduled = item.get("publish_at")
+            schedule_text = ""
+            if scheduled is not None:
+                schedule_text = (
+                    f"  (công khai {format_vn_publish_time(scheduled)} giờ VN)"
+                )
             print(
                 f"   Phần {item['part']}: "
                 f"https://www.youtube.com/watch?v={item['video_id']}"
+                f"{schedule_text}"
             )
 
     print()

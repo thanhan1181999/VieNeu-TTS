@@ -10,7 +10,7 @@ DEFAULT_CRAW_SELECTOR="#chapter-c"
 DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
 DEFAULT_PLAYLIST_ID="PLerSSQqUz9Wc"
-DEFAULT_PRIVACY_STATUS="public"
+DEFAULT_PRIVACY_STATUS="private"
 DEFAULT_REVIEW_LABEL_POSITION="top_left"
 
 read_required() {
@@ -31,18 +31,6 @@ read_boolean() {
             n|N|no|NO|No) echo false; return;;
             "") echo "$default"; return;;
             *) echo "Please enter y/yes or n/no." >&2;;
-        esac
-    done
-}
-
-read_privacy() {
-    local default="${1:-$DEFAULT_PRIVACY_STATUS}" value
-    while true; do
-        read -r -p "Privacy status [$default] (public / unlisted / private): " value
-        value="${value:-$default}"
-        case "$value" in
-            public|unlisted|private) echo "$value"; return;;
-            *) echo "Chỉ nhận: public / unlisted / private" >&2;;
         esac
     done
 }
@@ -385,9 +373,7 @@ if [ "$GENERATE_VIDEO" = true ]; then
             read -r -p "Playlist ID [$DEFAULT_PLAYLIST_ID]: " PLAYLIST_ID
             PLAYLIST_ID="${PLAYLIST_ID:-$DEFAULT_PLAYLIST_ID}"
         fi
-        if [ -z "$PRIVACY_STATUS" ]; then
-            PRIVACY_STATUS=$(read_privacy "$DEFAULT_PRIVACY_STATUS")
-        fi
+        PRIVACY_STATUS="$DEFAULT_PRIVACY_STATUS"
         DEFAULT_STORY_THUMBNAIL="stories/$STORY/thumbnail.jpeg"
         if [ -z "$THUMBNAIL_PATH" ] || [ ! -f "$THUMBNAIL_PATH" ]; then
             if [ -n "$THUMBNAIL_PATH" ]; then
@@ -464,7 +450,7 @@ if [ "$UPLOAD_YOUTUBE" = true ]; then
     echo "Thể loại             : $GENRE"
     echo "Tags                 : $TAGS"
     echo "Playlist ID          : $PLAYLIST_ID"
-    echo "Privacy              : $PRIVACY_STATUS"
+    echo "Privacy              : private (lên lịch 20:00 giờ VN, mỗi tập cách 1 ngày)"
     echo "Thumbnail            : $THUMBNAIL_PATH"
     echo "Label position       : $REVIEW_LABEL_POSITION"
 fi

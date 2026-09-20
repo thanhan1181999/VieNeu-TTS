@@ -58,7 +58,6 @@ Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới
 | `Thể loại` | Có | — | Thể loại |
 | `Tags` | Có | — | Phân tách bằng dấu phẩy (`#` tùy chọn) |
 | `Playlist ID` | Không | `PLerSSQqUz9Wc` | Playlist sẽ gắn video |
-| `Privacy status` | Không | `public` | `public` / `unlisted` / `private` |
 | `Thumbnail path` | Không | `stories/<Story>/thumbnail.jpeg` | Ảnh thumbnail YouTube |
 | `Label position` | Không | `top_left` | Vị trí chữ «Tập N»: `top_left` / `middle_left` / `bottom_left` |
 
@@ -101,7 +100,7 @@ Nếu `Generate Video?` = No thì **không upload**, kể cả khi folder đã c
   "genre": "Thể loại",
   "tags": "#tag1, #tag2",
   "playlist_id": "PLerSSQqUz9Wc",
-  "privacy_status": "public",
+  "privacy_status": "private",
   "thumbnail_path": "stories/truyen-001/thumbnail.jpeg",
   "review_label_position": "top_left"
 }
@@ -163,6 +162,10 @@ Bước 6 chỉ chạy khi cả `Generate Video` và `Upload YouTube` đều Yes
 - Description giống nhau cho mọi video (template + đoạn mô tả hỏi lúc đầu)
 - Thumbnail lấy đường dẫn hỏi lúc đầu (mặc định: `stories/<Story>/thumbnail.jpeg`)
 - Mỗi part được tạo `review_partN.jpeg` (chữ «Tập N») rồi dùng làm thumbnail YouTube. Vị trí chữ: `top_left` / `middle_left` / `bottom_left`
+- Video luôn ở chế độ `private` và gắn `publishAt` để công khai lúc 20:00 giờ Việt Nam
+- Tập chưa đăng đầu tiên: 20:00 tối nay (giờ VN). Nếu đã quá 20:00 thì chuyển sang 20:00 ngày mai
+- Tập sau đăng sau tập trước đúng 1 ngày (cùng giờ 20:00)
+- Nếu lần trước đã có `publish_at` trong log, lần này tiếp tục từ ngày hôm sau của lịch cũ (không trùng ngày)
 - Part đã đăng được ghi vào `stories/<Story>/upload_log.json`; lần sau bỏ qua
 - Một tập lỗi thì vẫn tiếp tục các tập còn lại
 
@@ -204,7 +207,6 @@ Tác giả: Tên tác giả
 Thể loại: Tiên hiệp
 Tags (phân tách bằng dấu phẩy): #tag1, #tag2
 Playlist ID [PLerSSQqUz9Wc]:
-Privacy status [public] (public / unlisted / private):
 Thumbnail path [stories/truyen-001/thumbnail.jpeg]:
 Chọn [1/2/3, mặc định top_left]:
 ```
@@ -273,4 +275,6 @@ uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMB
 - `0.txt` (phần giới thiệu) chỉ hỏi nhập lần đầu khi chưa có file
 - Chế độ rút gọn yêu cầu đã có `cover.*` và `voice/reference.wav`
 - Khi upload cần file thumbnail; mặc định là `stories/<Story>/thumbnail.jpeg`
+- Video được đăng private rồi lên lịch công khai lúc 20:00 giờ Việt Nam; mỗi tập cách nhau 1 ngày
+- Kênh YouTube có thể cần xác minh (xác thực điện thoại) mới lên lịch được
 - Giới hạn bình luận (chỉ người đăng ký) đặt trên YouTube Studio; API không hỗ trợ
