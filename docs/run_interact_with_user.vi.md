@@ -45,7 +45,7 @@ Tiếp theo, chọn có chạy từng bước hay không (`Y/n`):
 | `Crawling Title?` | Yes | `crawl_title.js` |
 | `Generate Video?` | Yes | `tts/make_video_ver4.py` |
 | `Add episode_label?` | Yes | Vẽ chữ «Tập N» góc trên trái (chỉ hỏi khi Generate Video = Yes) |
-| `Upload YouTube?` | Yes | `upload/upload_youtube_ver1.py` (chỉ hỏi khi Generate Video = Yes) |
+| `Upload YouTube?` | Yes | `upload/upload_youtube_ver1.py` (hỏi riêng, không phụ thuộc Generate Video) |
 
 Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới đây, script hỏi thêm một lần rồi lưu; lần sau không hỏi lại.
 
@@ -73,7 +73,7 @@ Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới
 
 URL, selector, cover, voice, title / description / tags YouTube lấy từ `config.json` — không hỏi lại.
 
-Nếu `Generate Video?` = No thì **không upload**, kể cả khi folder đã có mp4.
+`Generate Video?` và `Upload YouTube?` chọn độc lập. Có thể chỉ tạo video, chỉ upload mp4 có sẵn, làm cả hai, hoặc bỏ cả hai.
 
 ---
 
@@ -154,7 +154,7 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 ## Upload YouTube
 
-Bước 6 chỉ chạy khi cả `Generate Video` và `Upload YouTube` đều Yes.
+Bước 6 chỉ chạy khi `Upload YouTube` = Yes. `Generate Video` = No vẫn upload được nếu folder đã có mp4.
 
 - Gọi `upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"`
 - Quét mọi file `<Story>_partN.mp4` trong `stories/<Story>/`

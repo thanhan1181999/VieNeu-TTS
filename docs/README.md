@@ -43,11 +43,11 @@ Mở Terminal và thực thi lệnh sau:
 - **Lần đầu** (truyện mới): nhập đầy đủ URL, selector, voice, cover, …
 - **Lần sau**: chỉ cần `Story` + khoảng chương + chọn bước chạy; cấu hình nằm trong `stories/<Story>/config.json`
 
-Khi bật **Generate Video** và **Upload YouTube**, script sẽ:
+**Generate Video** và **Upload YouTube** hỏi riêng, chọn độc lập:
 
-- Tạo video `stories/<Story>/<Story>_partN.mp4` (không tạo lại part đã có)
-- Hỏi title / description / tags / tác giả / … **một lần**, lưu vào `config.json`
-- Upload các part chưa có trong `stories/<Story>/upload_log.json`
-- Dùng thumbnail YouTube theo đường dẫn nhập lúc upload (mặc định `stories/<Story>/thumbnail.jpeg`)
+- Bật Generate Video: tạo `stories/<Story>/<Story>_partN.mp4` (không tạo lại part đã có)
+- Bật Upload YouTube: hỏi title / description / tags / tác giả / … **một lần**, lưu vào `config.json`; upload các part chưa có trong `stories/<Story>/upload_log.json`
+- Có thể chỉ tạo video, chỉ upload mp4 có sẵn, làm cả hai, hoặc bỏ cả hai
+- Thumbnail YouTube theo đường dẫn nhập lúc upload (mặc định `stories/<Story>/thumbnail.jpeg`)
 
 Chi tiết: [run_interact_with_user.vi.md](./run_interact_with_user.vi.md) / [run_interact_with_user.ja.md](./run_interact_with_user.ja.md)

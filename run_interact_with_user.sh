@@ -338,56 +338,17 @@ EXISTING_YOUTUBE_DESCRIPTION=""
 
 if [ "$GENERATE_VIDEO" = true ]; then
     DEFAULT_ADD_EPISODE_LABEL=true
-    DEFAULT_UPLOAD_YOUTUBE=true
     if [ -f "$CONFIG_FILE" ]; then
         DEFAULT_ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label true)
-        DEFAULT_UPLOAD_YOUTUBE=$(load_config_value "$CONFIG_FILE" upload_youtube true)
-        YOUTUBE_TITLE=$(load_config_value "$CONFIG_FILE" youtube_title)
-        DESCRIPTION_STORY_NAME=$(load_config_value "$CONFIG_FILE" description_story_name)
-        AUTHOR=$(load_config_value "$CONFIG_FILE" author)
-        GENRE=$(load_config_value "$CONFIG_FILE" genre)
-        PLAYLIST_ID=$(load_config_value "$CONFIG_FILE" playlist_id)
-        PRIVACY_STATUS=$(load_config_value "$CONFIG_FILE" privacy_status)
-        TAGS=$(load_config_value "$CONFIG_FILE" tags)
-        THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
-        REVIEW_LABEL_POSITION=$(load_config_value "$CONFIG_FILE" review_label_position)
-        EXISTING_YOUTUBE_DESCRIPTION=$(load_config_value "$CONFIG_FILE" youtube_description)
-    else
-        EXISTING_YOUTUBE_DESCRIPTION=""
     fi
-
     ADD_EPISODE_LABEL=$(read_boolean "Add episode_label?" "$DEFAULT_ADD_EPISODE_LABEL")
-    UPLOAD_YOUTUBE=$(read_boolean "Upload YouTube?" "$DEFAULT_UPLOAD_YOUTUBE")
-
-    if [ "$UPLOAD_YOUTUBE" = true ]; then
-        [ -z "$YOUTUBE_TITLE" ] && YOUTUBE_TITLE=$(read_required "YouTube title: ")
-        if [ -z "$EXISTING_YOUTUBE_DESCRIPTION" ]; then
-            YOUTUBE_DESCRIPTION=$(read_multiline_required "YouTube description:")
-            SAVE_YOUTUBE_DESCRIPTION=true
-        fi
-        [ -z "$DESCRIPTION_STORY_NAME" ] && DESCRIPTION_STORY_NAME=$(read_required "Tên truyện (description_story_name): ")
-        [ -z "$AUTHOR" ] && AUTHOR=$(read_required "Tác giả: ")
-        [ -z "$GENRE" ] && GENRE=$(read_required "Thể loại: ")
-        [ -z "$TAGS" ] && TAGS=$(read_required "Tags (phân tách bằng dấu phẩy): ")
-        if [ -z "$PLAYLIST_ID" ]; then
-            read -r -p "Playlist ID [$DEFAULT_PLAYLIST_ID]: " PLAYLIST_ID
-            PLAYLIST_ID="${PLAYLIST_ID:-$DEFAULT_PLAYLIST_ID}"
-        fi
-        PRIVACY_STATUS="$DEFAULT_PRIVACY_STATUS"
-        DEFAULT_STORY_THUMBNAIL="stories/$STORY/thumbnail.jpeg"
-        if [ -z "$THUMBNAIL_PATH" ] || [ ! -f "$THUMBNAIL_PATH" ]; then
-            if [ -n "$THUMBNAIL_PATH" ]; then
-                echo "WARNING: Thumbnail not found: $THUMBNAIL_PATH" >&2
-            fi
-            THUMBNAIL_PATH=$(read_existing_file "Thumbnail path" "$DEFAULT_STORY_THUMBNAIL")
-        fi
-        if [ -z "$REVIEW_LABEL_POSITION" ]; then
-            REVIEW_LABEL_POSITION=$(read_label_position "$DEFAULT_REVIEW_LABEL_POSITION")
-        fi
-    fi
 elif [ -f "$CONFIG_FILE" ]; then
     ADD_EPISODE_LABEL=$(load_config_value "$CONFIG_FILE" add_episode_label false)
-    UPLOAD_YOUTUBE=$(load_config_value "$CONFIG_FILE" upload_youtube false)
+fi
+
+DEFAULT_UPLOAD_YOUTUBE=true
+if [ -f "$CONFIG_FILE" ]; then
+    DEFAULT_UPLOAD_YOUTUBE=$(load_config_value "$CONFIG_FILE" upload_youtube true)
     YOUTUBE_TITLE=$(load_config_value "$CONFIG_FILE" youtube_title)
     DESCRIPTION_STORY_NAME=$(load_config_value "$CONFIG_FILE" description_story_name)
     AUTHOR=$(load_config_value "$CONFIG_FILE" author)
@@ -397,6 +358,36 @@ elif [ -f "$CONFIG_FILE" ]; then
     TAGS=$(load_config_value "$CONFIG_FILE" tags)
     THUMBNAIL_PATH=$(load_config_value "$CONFIG_FILE" thumbnail_path)
     REVIEW_LABEL_POSITION=$(load_config_value "$CONFIG_FILE" review_label_position)
+    EXISTING_YOUTUBE_DESCRIPTION=$(load_config_value "$CONFIG_FILE" youtube_description)
+fi
+
+UPLOAD_YOUTUBE=$(read_boolean "Upload YouTube?" "$DEFAULT_UPLOAD_YOUTUBE")
+
+if [ "$UPLOAD_YOUTUBE" = true ]; then
+    [ -z "$YOUTUBE_TITLE" ] && YOUTUBE_TITLE=$(read_required "YouTube title: ")
+    if [ -z "$EXISTING_YOUTUBE_DESCRIPTION" ]; then
+        YOUTUBE_DESCRIPTION=$(read_multiline_required "YouTube description:")
+        SAVE_YOUTUBE_DESCRIPTION=true
+    fi
+    [ -z "$DESCRIPTION_STORY_NAME" ] && DESCRIPTION_STORY_NAME=$(read_required "Tên truyện (description_story_name): ")
+    [ -z "$AUTHOR" ] && AUTHOR=$(read_required "Tác giả: ")
+    [ -z "$GENRE" ] && GENRE=$(read_required "Thể loại: ")
+    [ -z "$TAGS" ] && TAGS=$(read_required "Tags (phân tách bằng dấu phẩy): ")
+    if [ -z "$PLAYLIST_ID" ]; then
+        read -r -p "Playlist ID [$DEFAULT_PLAYLIST_ID]: " PLAYLIST_ID
+        PLAYLIST_ID="${PLAYLIST_ID:-$DEFAULT_PLAYLIST_ID}"
+    fi
+    PRIVACY_STATUS="$DEFAULT_PRIVACY_STATUS"
+    DEFAULT_STORY_THUMBNAIL="stories/$STORY/thumbnail.jpeg"
+    if [ -z "$THUMBNAIL_PATH" ] || [ ! -f "$THUMBNAIL_PATH" ]; then
+        if [ -n "$THUMBNAIL_PATH" ]; then
+            echo "WARNING: Thumbnail not found: $THUMBNAIL_PATH" >&2
+        fi
+        THUMBNAIL_PATH=$(read_existing_file "Thumbnail path" "$DEFAULT_STORY_THUMBNAIL")
+    fi
+    if [ -z "$REVIEW_LABEL_POSITION" ]; then
+        REVIEW_LABEL_POSITION=$(read_label_position "$DEFAULT_REVIEW_LABEL_POSITION")
+    fi
 fi
 
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
@@ -511,7 +502,7 @@ else
     echo "=== 5. Making Video SKIPPED ==="
 fi
 
-if [ "$GENERATE_VIDEO" = true ] && [ "$UPLOAD_YOUTUBE" = true ]; then
+if [ "$UPLOAD_YOUTUBE" = true ]; then
     echo ""
     echo "=== 6. Uploading YouTube ==="
     if [ ! -f "$THUMBNAIL_PATH" ]; then
