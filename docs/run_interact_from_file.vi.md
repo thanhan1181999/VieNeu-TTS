@@ -1,12 +1,15 @@
-# Hướng dẫn dùng `run_interact_with_user.sh`
+# Hướng dẫn dùng `run_interact_from_file.sh`
 
-Script chạy tương tác, tự động hóa chuỗi xử lý: crawl truyện → làm sạch text → tạo TTS → crawl tiêu đề chương → tạo video → upload YouTube.
+Script chạy tương tác, tự động hóa chuỗi xử lý: chia file truyện TXT theo chương → làm sạch text → tạo TTS → tạo video → upload YouTube. **Không** crawl từ website.
 
-Nên chạy từ **thư mục gốc của repository**.
+Nên chạy từ **thư mục gốc của repository**. Lần đầu cần cấp quyền thực thi.
 
 ```bash
-./run_interact_with_user.sh
+chmod +x run_interact_from_file.sh
+./run_interact_from_file.sh
 ```
+
+Luồng crawl từ web vẫn dùng `run_interact_with_user.sh`.
 
 ---
 
@@ -14,11 +17,13 @@ Nên chạy từ **thư mục gốc của repository**.
 
 | Tình huống | Chế độ | Cần nhập |
 |---|---|---|
-| Chưa có `stories/<Story>/` (truyện mới) | Đầy đủ | URL, selector, voice, cover, … |
+| Chưa có `stories/<Story>/` (truyện mới) | Đầy đủ | Path file TXT, voice, cover, … |
 | Đã có `stories/<Story>/config.json` (lần 2+) | Rút gọn | Story + Start/End + bật/tắt từng bước |
-| Có thư mục nhưng chưa có `config.json` (truyện cũ) | Chuyển tiếp | Hỏi URL/selector một lần để tạo config; cover/voice nếu đã có thì dùng luôn |
+| Có thư mục nhưng chưa có `config.json` (truyện cũ) | Chuyển tiếp | Có `source.txt` thì dùng luôn; chưa có thì hỏi path TXT một lần |
 
-Sau lần chạy đầu, cấu hình được lưu vào `stories/<Story>/config.json`. Từ lần sau không hỏi lại cover / voice (dùng `cover.*` và `voice/reference.wav` có sẵn).
+Sau lần chạy đầu, cấu hình được lưu vào `stories/<Story>/config.json`. Từ lần sau không hỏi lại cover / voice / `source.txt`.
+
+File TXT gốc lần đầu bị **move** và đổi tên thành `stories/<Story>/source.txt`. Nếu `source.txt` đã có thì dùng lại, không ghi đè.
 
 ---
 
@@ -27,12 +32,9 @@ Sau lần chạy đầu, cấu hình được lưu vào `stories/<Story>/config.
 | Mục | Bắt buộc | Mặc định | Mô tả |
 |---|---|---|---|
 | `Story` | Có | — | Tên thư mục truyện (`stories/<Story>/`) |
-| `Start chapter` | Có | — | Chương bắt đầu |
-| `End chapter` | Có | — | Chương kết thúc |
-| `Content URL` | Có | — | URL crawl nội dung (`crawl.js`) |
-| `Title URL` | Có | — | URL crawl tiêu đề (`crawl_title.js`) |
-| `Crawl selector` | Không | `#chapter-c` | CSS selector nội dung chương |
-| `Crawl title selector` | Không | `#list-chapter ul.list-chapter` | CSS selector danh sách tiêu đề |
+| `Start chapter` | Có | — | Chương bắt đầu cho TTS / video |
+| `End chapter` | Có | — | Chương kết thúc cho TTS / video |
+| `Story TXT file path` | Có | — | File gốc chứa toàn bộ chương; được move thành `source.txt` |
 | `Voice path` | Không | `stories/voices/reference.wav` | File giọng mẫu (copy vào `voice/reference.wav`) |
 | `Image cover file path` | Có | — | Ảnh bìa (move thành `cover.<đuôi>`) |
 
@@ -40,12 +42,14 @@ Tiếp theo, chọn có chạy từng bước hay không (`Y/n`):
 
 | Mục | Mặc định | Xử lý tương ứng |
 |---|---|---|
-| `Crawl & Clean?` | Yes | `crawl.js` → `clean1.js` |
-| `Generate Audio?` | Yes | `tts/make_audio.py` |
-| `Crawling Title?` | Yes | `crawl_title.js` |
+| `Split story?` | Yes | `craw/split_story.js` (chia toàn bộ file; không dùng Start/End) |
+| `Clean?` | Yes | `craw/clean1.js` |
+| `Generate Audio?` | Yes | `tts/make_audio.py` (chỉ Start–End) |
 | `Generate Video?` | Yes | `tts/make_video_ver4.py` |
 | `Add episode_label?` | Yes | Vẽ chữ «Tập N» góc trên trái (chỉ hỏi khi Generate Video = Yes) |
 | `Upload YouTube?` | Yes | `upload/upload_youtube_ver1.py` (hỏi riêng, không phụ thuộc Generate Video) |
+
+**Không có bước Crawling Title.** Tiêu đề chương được ghi vào `titles.txt` lúc chia file.
 
 Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới đây, script hỏi thêm một lần rồi lưu; lần sau không hỏi lại.
 
@@ -68,12 +72,57 @@ Nếu `Upload YouTube?` = Yes và `config.json` chưa có các trường dưới
 | Mục | Mô tả |
 |---|---|
 | `Story` | Tên thư mục đã có `config.json` |
-| `Start chapter` / `End chapter` | Khoảng chương lần này |
+| `Start chapter` / `End chapter` | Khoảng chương lần này cho TTS / video |
 | Bật/tắt từng bước | Mặc định theo lần trước; Enter để giữ nguyên |
 
-URL, selector, cover, voice, title / description / tags YouTube lấy từ `config.json` — không hỏi lại.
+`source.txt`, cover, voice, title / description / tags YouTube lấy từ `config.json` — không hỏi lại. Thiếu `source.txt` thì báo lỗi.
 
-`Generate Video?` và `Upload YouTube?` chọn độc lập. Có thể chỉ tạo video, chỉ upload mp4 có sẵn, làm cả hai, hoặc bỏ cả hai.
+`Generate Video?` và `Upload YouTube?` chọn độc lập.
+
+---
+
+## Định dạng file TXT gốc
+
+Dòng tiêu đề chương phải **đứng một dòng riêng** và **bắt buộc có dấu hai chấm** `:`. Không phân biệt hoa/thường. Khoảng trắng và số 0 đầu được chấp nhận.
+
+```text
+(phần giới thiệu đầu file sẽ bị bỏ)
+
+Chương 1: tiêu đề A
+nội dung…
+
+Chương 2: tiêu đề B
+nội dung…
+
+CHƯƠNG  03 : tiêu đề C
+nội dung…
+```
+
+Quy tắc:
+
+- Bắt buộc bắt đầu từ Chương 1 và liền mạch 1, 2, 3, … — thiếu / nhảy / trùng số thì lỗi
+- `Chương 01` thành `1.txt` (bỏ số 0 đầu)
+- Text trước Chương 1 bị bỏ. Nếu chưa có `script/0.txt` thì vẫn hỏi nhập giới thiệu như luồng cũ
+- Mỗi `N.txt` giữ dòng heading + nội dung (TTS đọc cả tên chương)
+- Chương không có body vẫn tạo file chỉ gồm heading
+- Text sau chương cuối thuộc chương cuối
+- Chia **toàn bộ** file. Start/End chỉ dùng cho TTS và video
+
+---
+
+## `titles.txt`
+
+```text
+Giới Thiệu Truyện
+Chương 1: tiêu đề A
+Chương 2: tiêu đề B
+```
+
+- Dòng 1 cố định `Giới Thiệu Truyện` (giống crawl web)
+- Các dòng sau giữ nguyên dòng heading trong file gốc
+- Nếu `titles.txt` đã có thì **không cập nhật** (thêm chương vào `source.txt` cũng không làm file này dài hơn, trừ khi xóa rồi chạy Split lại)
+
+`script/N.txt` đã tồn tại thì skip, không ghi đè.
 
 ---
 
@@ -81,15 +130,12 @@ URL, selector, cover, voice, title / description / tags YouTube lấy từ `conf
 
 ```json
 {
-  "content_url": "https://truyenfull.live/example/",
-  "title_url": "https://truyenfull.live/example/",
-  "crawl_selector": "#chapter-c",
-  "crawl_title_selector": "#list-chapter ul.list-chapter",
+  "source_txt": "stories/truyen-001/source.txt",
   "last_start": "1",
   "last_end": "10",
-  "crawl_and_clean": true,
+  "split_story": true,
+  "clean": true,
   "generate_audio": true,
-  "crawling_title": true,
   "generate_video": true,
   "add_episode_label": true,
   "upload_youtube": true,
@@ -106,29 +152,9 @@ URL, selector, cover, voice, title / description / tags YouTube lấy từ `conf
 }
 ```
 
+Script này **không xóa** các field sẵn có như `content_url`. Nếu cùng Story từng chạy luồng crawl web, URL vẫn được giữ.
+
 Mỗi lần chạy xong, script cập nhật `last_start` / `last_end` và các cờ bước.
-
----
-
-## Content URL và Title URL khác nhau thế nào?
-
-Một số website dùng URL base khác nhau cho trang nội dung chương và trang danh sách tiêu đề.
-
-- `Content URL` — dùng lấy nội dung từng chương (ghép dạng `{url}/chuong-{n}/`)
-- `Title URL` — dùng lấy danh sách tiêu đề (ghép dạng `{url}/`, `{url}/trang-{n}/`)
-
-Nếu cùng một URL thì nhập giống nhau cho cả hai ô.
-
----
-
-## Về selector
-
-Bấm Enter để dùng giá trị mặc định:
-
-- `Crawl selector` mặc định: `#chapter-c`
-- `Crawl title selector` mặc định: `#list-chapter ul.list-chapter`
-
-Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 ---
 
@@ -136,7 +162,7 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 1. Hỏi tên Story → phân loại mới / rút gọn / chuyển tiếp
 2. Nhập các mục cần thiết và in lại cấu hình
-3. Lưu (hoặc cập nhật) `config.json`
+3. Lần đầu: move file TXT thành `source.txt`; lưu (hoặc cập nhật) `config.json`
 4. Nếu chưa có `script/0.txt` thì hỏi nhập phần giới thiệu (Ctrl+D để kết thúc)
 5. Chạy các bước đang bật
 
@@ -154,7 +180,7 @@ Chỉ cần đổi khi cấu trúc HTML của site khác với mặc định.
 
 ## Upload YouTube
 
-Bước 6 chỉ chạy khi `Upload YouTube` = Yes. `Generate Video` = No vẫn upload được nếu folder đã có mp4.
+Bước 5 chỉ chạy khi `Upload YouTube` = Yes. `Generate Video` = No vẫn upload được nếu folder đã có mp4.
 
 - Gọi `upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"`
 - Quét mọi file `<Story>_partN.mp4` trong `stories/<Story>/`
@@ -187,15 +213,12 @@ Nếu `config.json` thiếu trường, script hỏi bổ sung rồi lưu. Cần 
 Story: truyen-001
 Start chapter: 1
 End chapter: 10
-Content URL: https://example.com/truyen-a/
-Title URL: https://example.com/truyen-a/
-Crawl selector [#chapter-c]:
-Crawl title selector [#list-chapter ul.list-chapter]:
+Story TXT file path: /path/to/full-story.txt
 Voice path [stories/voices/reference.wav]:
 Image cover file path (required): /path/to/cover.jpg
-Crawl & Clean? [Y/n]:
+Split story? [Y/n]:
+Clean? [Y/n]:
 Generate Audio? [Y/n]:
-Crawling Title? [Y/n]:
 Generate Video? [Y/n]:
 Add episode_label? [Y/n]:
 Upload YouTube? [Y/n]:
@@ -221,43 +244,30 @@ Short mode — only chapter range and optional steps are required.
 Last run chapters: 1 -> 10
 Start chapter: 11
 End chapter: 20
-Crawl & Clean? [Y/n]:
+Split story? [Y/n]:
+Clean? [Y/n]:
 Generate Audio? [Y/n]:
-Crawling Title? [Y/n]:
 Generate Video? [Y/n]:
 Add episode_label? [Y/n]:
 Upload YouTube? [Y/n]:
-```
-
-Khi nội dung và tiêu đề dùng cùng URL:
-
-```text
-Content URL: https://truyenfull.live/thieu-gia-bi-bo-roi/
-Title URL: https://truyenfull.live/thieu-gia-bi-bo-roi/
 ```
 
 ---
 
 ## Lệnh nội bộ được gọi (tham khảo)
 
-Crawl nội dung:
+Chia file TXT:
 
 ```bash
-node craw/crawl.js \
-  --story "$STORY" \
-  --start "$START" \
-  --end "$END" \
-  --url "$CONTENT_URL" \
-  --selector "$CRAW_SELECTOR"
+node craw/split_story.js --story "$STORY"
 ```
 
-Crawl tiêu đề:
+Tùy chọn chỉ định file nguồn trực tiếp:
 
 ```bash
-node craw/crawl_title.js \
-  --url "$TITLE_URL" \
+node craw/split_story.js \
   --story "$STORY" \
-  --selector "$CRAW_TITLE_SELECTOR"
+  --source /path/to/story.txt
 ```
 
 Upload YouTube:
@@ -270,10 +280,12 @@ uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMB
 
 ## Lưu ý
 
-- Cần có sẵn file giọng mẫu và ảnh bìa trước lần chạy đầu
-- Không ghi đè `stories/<Story>/voice/reference.wav` hoặc `cover.*` nếu đã tồn tại
-- `0.txt` (phần giới thiệu) chỉ hỏi nhập lần đầu khi chưa có file
-- Chế độ rút gọn yêu cầu đã có `cover.*` và `voice/reference.wav`
+- Cần có sẵn file giọng mẫu, ảnh bìa và file TXT đủ chương trước lần chạy đầu
+- File TXT gốc bị **move**, không copy. Muốn giữ bản gốc thì copy trước
+- Không ghi đè `stories/<Story>/voice/reference.wav`, `cover.*` hoặc `source.txt` nếu đã tồn tại
+- `0.txt` (phần giới thiệu) chỉ hỏi nhập lần đầu khi chưa có file. Đoạn text trước Chương 1 trong file TXT không được dùng
+- Chế độ rút gọn yêu cầu đã có `cover.*`, `voice/reference.wav` và `source.txt`
+- `titles.txt` đã có thì không tự cập nhật khi thêm chương vào `source.txt`. Muốn cập nhật thì xóa `titles.txt` rồi chạy Split lại
 - Khi upload cần file thumbnail; mặc định là `stories/<Story>/thumbnail.jpeg`
 - Video được đăng private rồi lên lịch công khai lúc 20:00 giờ Việt Nam; mỗi tập cách nhau 1 ngày
 - Kênh YouTube có thể cần xác minh (xác thực điện thoại) mới lên lịch được

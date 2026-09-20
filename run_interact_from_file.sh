@@ -2,12 +2,10 @@
 set -e
 
 echo "============================================================"
-echo "        Story Video Generator"
+echo "        Story Video Generator (from TXT file)"
 echo "============================================================"
 echo ""
 
-DEFAULT_CRAW_SELECTOR="#chapter-c"
-DEFAULT_CRAW_TITLE_SELECTOR="#list-chapter ul.list-chapter"
 DEFAULT_VOICE_PATH="stories/voices/reference.wav"
 DEFAULT_PLAYLIST_ID="PLerSSQqUz9Wc"
 DEFAULT_PRIVACY_STATUS="private"
@@ -40,6 +38,18 @@ read_existing_file() {
     while true; do
         read -r -p "$prompt [$default]: " value
         value="${value:-$default}"
+        if [ -f "$value" ]; then
+            echo "$value"
+            return
+        fi
+        echo "ERROR: File not found: $value" >&2
+    done
+}
+
+read_existing_file_required() {
+    local prompt="$1" value
+    while true; do
+        value=$(read_required "$prompt")
         if [ -f "$value" ]; then
             echo "$value"
             return
@@ -104,15 +114,12 @@ else:
 
 save_config() {
     local file="$1"
-    CONTENT_URL="$CONTENT_URL" \
-    TITLE_URL="$TITLE_URL" \
-    CRAW_SELECTOR="$CRAW_SELECTOR" \
-    CRAW_TITLE_SELECTOR="$CRAW_TITLE_SELECTOR" \
+    SOURCE_TXT="$SOURCE_TXT" \
     START="$START" \
     END="$END" \
-    CRAWL_AND_CLEAN="$CRAWL_AND_CLEAN" \
+    SPLIT_STORY="$SPLIT_STORY" \
+    CLEAN="$CLEAN" \
     GENERATE_AUDIO="$GENERATE_AUDIO" \
-    CRAWLING_TITLE="$CRAWLING_TITLE" \
     GENERATE_VIDEO="$GENERATE_VIDEO" \
     ADD_EPISODE_LABEL="$ADD_EPISODE_LABEL" \
     UPLOAD_YOUTUBE="$UPLOAD_YOUTUBE" \
@@ -137,15 +144,12 @@ if os.path.isfile(path):
         config = json.load(f)
 
 config.update({
-    'content_url': os.environ['CONTENT_URL'],
-    'title_url': os.environ['TITLE_URL'],
-    'crawl_selector': os.environ['CRAW_SELECTOR'],
-    'crawl_title_selector': os.environ['CRAW_TITLE_SELECTOR'],
+    'source_txt': os.environ['SOURCE_TXT'],
     'last_start': os.environ['START'],
     'last_end': os.environ['END'],
-    'crawl_and_clean': os.environ['CRAWL_AND_CLEAN'] == 'true',
+    'split_story': os.environ['SPLIT_STORY'] == 'true',
+    'clean': os.environ['CLEAN'] == 'true',
     'generate_audio': os.environ['GENERATE_AUDIO'] == 'true',
-    'crawling_title': os.environ['CRAWLING_TITLE'] == 'true',
     'generate_video': os.environ['GENERATE_VIDEO'] == 'true',
     'add_episode_label': os.environ['ADD_EPISODE_LABEL'] == 'true',
     'upload_youtube': os.environ.get('UPLOAD_YOUTUBE', 'false') == 'true',
@@ -185,6 +189,8 @@ VOICE_DIR="$STORY_DIR/voice"
 AUDIO_DIR="$STORY_DIR/audio"
 SCRIPT_DIR="$STORY_DIR/script"
 VOICE_DEST="$VOICE_DIR/reference.wav"
+SOURCE_DEST="$STORY_DIR/source.txt"
+SOURCE_TXT="$SOURCE_DEST"
 
 if [ -f "$CONFIG_FILE" ]; then
     # ===== SHORT MODE: story already configured =====
@@ -192,11 +198,6 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "Found existing config: $CONFIG_FILE"
     echo "Short mode — only chapter range and optional steps are required."
     echo ""
-
-    CONTENT_URL=$(load_config_value "$CONFIG_FILE" content_url)
-    TITLE_URL=$(load_config_value "$CONFIG_FILE" title_url)
-    CRAW_SELECTOR=$(load_config_value "$CONFIG_FILE" crawl_selector "$DEFAULT_CRAW_SELECTOR")
-    CRAW_TITLE_SELECTOR=$(load_config_value "$CONFIG_FILE" crawl_title_selector "$DEFAULT_CRAW_TITLE_SELECTOR")
 
     LAST_START=$(load_config_value "$CONFIG_FILE" last_start)
     LAST_END=$(load_config_value "$CONFIG_FILE" last_end)
@@ -208,14 +209,14 @@ if [ -f "$CONFIG_FILE" ]; then
     START=$(read_required "Start chapter: ")
     END=$(read_required "End chapter: ")
 
-    DEFAULT_CRAWL_AND_CLEAN=$(load_config_value "$CONFIG_FILE" crawl_and_clean true)
+    DEFAULT_SPLIT_STORY=$(load_config_value "$CONFIG_FILE" split_story true)
+    DEFAULT_CLEAN=$(load_config_value "$CONFIG_FILE" clean true)
     DEFAULT_GENERATE_AUDIO=$(load_config_value "$CONFIG_FILE" generate_audio true)
-    DEFAULT_CRAWLING_TITLE=$(load_config_value "$CONFIG_FILE" crawling_title true)
     DEFAULT_GENERATE_VIDEO=$(load_config_value "$CONFIG_FILE" generate_video true)
 
-    CRAWL_AND_CLEAN=$(read_boolean "Crawl & Clean?" "$DEFAULT_CRAWL_AND_CLEAN")
+    SPLIT_STORY=$(read_boolean "Split story?" "$DEFAULT_SPLIT_STORY")
+    CLEAN=$(read_boolean "Clean?" "$DEFAULT_CLEAN")
     GENERATE_AUDIO=$(read_boolean "Generate Audio?" "$DEFAULT_GENERATE_AUDIO")
-    CRAWLING_TITLE=$(read_boolean "Crawling Title?" "$DEFAULT_CRAWLING_TITLE")
     GENERATE_VIDEO=$(read_boolean "Generate Video?" "$DEFAULT_GENERATE_VIDEO")
 
     COVER_DEST=$(find_cover "$STORY_DIR")
@@ -225,6 +226,10 @@ if [ -f "$CONFIG_FILE" ]; then
     fi
     if [ ! -f "$VOICE_DEST" ]; then
         echo "ERROR: Voice file not found: $VOICE_DEST"
+        exit 1
+    fi
+    if [ ! -f "$SOURCE_DEST" ]; then
+        echo "ERROR: Source TXT not found: $SOURCE_DEST"
         exit 1
     fi
 
@@ -237,14 +242,14 @@ elif [ -d "$STORY_DIR" ]; then
 
     START=$(read_required "Start chapter: ")
     END=$(read_required "End chapter: ")
-    CONTENT_URL=$(read_required "Content URL: ")
-    TITLE_URL=$(read_required "Title URL: ")
 
-    read -r -p "Crawl selector [$DEFAULT_CRAW_SELECTOR]: " CRAW_SELECTOR
-    CRAW_SELECTOR="${CRAW_SELECTOR:-$DEFAULT_CRAW_SELECTOR}"
-
-    read -r -p "Crawl title selector [$DEFAULT_CRAW_TITLE_SELECTOR]: " CRAW_TITLE_SELECTOR
-    CRAW_TITLE_SELECTOR="${CRAW_TITLE_SELECTOR:-$DEFAULT_CRAW_TITLE_SELECTOR}"
+    if [ -f "$SOURCE_DEST" ]; then
+        NEED_MOVE_SOURCE=false
+        echo "Using existing source: $SOURCE_DEST"
+    else
+        SOURCE_PATH=$(read_existing_file_required "Story TXT file path: ")
+        NEED_MOVE_SOURCE=true
+    fi
 
     COVER_DEST=$(find_cover "$STORY_DIR")
     if [ -z "$COVER_DEST" ]; then
@@ -274,9 +279,9 @@ elif [ -d "$STORY_DIR" ]; then
         NEED_COPY_VOICE=true
     fi
 
-    CRAWL_AND_CLEAN=$(read_boolean "Crawl & Clean?" true)
+    SPLIT_STORY=$(read_boolean "Split story?" true)
+    CLEAN=$(read_boolean "Clean?" true)
     GENERATE_AUDIO=$(read_boolean "Generate Audio?" true)
-    CRAWLING_TITLE=$(read_boolean "Crawling Title?" true)
     GENERATE_VIDEO=$(read_boolean "Generate Video?" true)
 
 else
@@ -287,23 +292,16 @@ else
 
     START=$(read_required "Start chapter: ")
     END=$(read_required "End chapter: ")
-    CONTENT_URL=$(read_required "Content URL: ")
-    TITLE_URL=$(read_required "Title URL: ")
-
-    read -r -p "Crawl selector [$DEFAULT_CRAW_SELECTOR]: " CRAW_SELECTOR
-    CRAW_SELECTOR="${CRAW_SELECTOR:-$DEFAULT_CRAW_SELECTOR}"
-
-    read -r -p "Crawl title selector [$DEFAULT_CRAW_TITLE_SELECTOR]: " CRAW_TITLE_SELECTOR
-    CRAW_TITLE_SELECTOR="${CRAW_TITLE_SELECTOR:-$DEFAULT_CRAW_TITLE_SELECTOR}"
+    SOURCE_PATH=$(read_existing_file_required "Story TXT file path: ")
 
     read -r -p "Voice path [$DEFAULT_VOICE_PATH]: " VOICE_PATH
     VOICE_PATH="${VOICE_PATH:-$DEFAULT_VOICE_PATH}"
 
     IMAGE_COVER_FILE_PATH=$(read_required "Image cover file path (required): ")
 
-    CRAWL_AND_CLEAN=$(read_boolean "Crawl & Clean?" true)
+    SPLIT_STORY=$(read_boolean "Split story?" true)
+    CLEAN=$(read_boolean "Clean?" true)
     GENERATE_AUDIO=$(read_boolean "Generate Audio?" true)
-    CRAWLING_TITLE=$(read_boolean "Crawling Title?" true)
     GENERATE_VIDEO=$(read_boolean "Generate Video?" true)
 
     if [ ! -f "$VOICE_PATH" ]; then
@@ -319,6 +317,7 @@ else
     COVER_DEST="$STORY_DIR/cover.$COVER_EXTENSION"
     NEED_COPY_VOICE=true
     NEED_MOVE_COVER=true
+    NEED_MOVE_SOURCE=true
 fi
 
 ADD_EPISODE_LABEL=false
@@ -392,7 +391,7 @@ fi
 
 mkdir -p "$AUDIO_DIR" "$SCRIPT_DIR" "$VOICE_DIR"
 
-# Setup voice / cover only when needed (first run or missing files).
+# Setup voice / cover / source only when needed (first run or missing files).
 if [ "${NEED_COPY_VOICE:-false}" = true ]; then
     if [ -e "$VOICE_DEST" ]; then
         echo "WARNING: Voice destination already exists: $VOICE_DEST"
@@ -411,6 +410,15 @@ if [ "${NEED_MOVE_COVER:-false}" = true ]; then
     fi
 fi
 
+if [ "${NEED_MOVE_SOURCE:-false}" = true ]; then
+    if [ -e "$SOURCE_DEST" ]; then
+        echo "WARNING: Source destination already exists: $SOURCE_DEST"
+        echo "Refusing to overwrite the existing file."
+    else
+        mv "$SOURCE_PATH" "$SOURCE_DEST"
+    fi
+fi
+
 # Persist config for next short-mode runs.
 save_config "$CONFIG_FILE"
 
@@ -420,17 +428,14 @@ echo "Configuration"
 echo "============================================================"
 echo "Story                : $STORY"
 echo "Chapters             : $START -> $END"
-echo "Content URL          : $CONTENT_URL"
-echo "Title URL            : $TITLE_URL"
-echo "Crawl selector       : $CRAW_SELECTOR"
-echo "Crawl title selector : $CRAW_TITLE_SELECTOR"
+echo "Source TXT           : $SOURCE_DEST"
 echo "Voice                : $VOICE_DEST"
 echo "Cover Image          : $COVER_DEST"
 echo "Config               : $CONFIG_FILE"
 echo "------------------------------------------------------------"
-echo "Crawl & Clean        : $CRAWL_AND_CLEAN"
+echo "Split story          : $SPLIT_STORY"
+echo "Clean                : $CLEAN"
 echo "Generate Audio       : $GENERATE_AUDIO"
-echo "Crawling Title       : $CRAWLING_TITLE"
 echo "Generate Video       : $GENERATE_VIDEO"
 echo "Add episode_label    : $ADD_EPISODE_LABEL"
 echo "Upload YouTube       : $UPLOAD_YOUTUBE"
@@ -463,16 +468,26 @@ if [ ! -f "$SCRIPT_DIR/0.txt" ]; then
     echo ""
 fi
 
-if [ "$CRAWL_AND_CLEAN" = true ]; then
+if [ "$SPLIT_STORY" = true ]; then
     echo ""
-    echo "=== 1. Crawling Content $STORY ($START -> $END) ==="
-    node craw/crawl.js --story "$STORY" --start "$START" --end "$END" --url "$CONTENT_URL" --selector "$CRAW_SELECTOR"
+    echo "=== 1. Splitting Story $STORY ==="
+    if [ ! -f "$SOURCE_DEST" ]; then
+        echo "ERROR: Source TXT not found: $SOURCE_DEST"
+        exit 1
+    fi
+    node craw/split_story.js --story "$STORY"
+else
     echo ""
-    echo "=== 2. Cleaning Content $STORY ($START -> $END) ==="
+    echo "=== 1. Splitting Story SKIPPED ==="
+fi
+
+if [ "$CLEAN" = true ]; then
+    echo ""
+    echo "=== 2. Cleaning Content $STORY ==="
     node craw/clean1.js "$STORY"
 else
     echo ""
-    echo "=== 1-2. Crawling & Cleaning SKIPPED ==="
+    echo "=== 2. Cleaning SKIPPED ==="
 fi
 
 if [ "$GENERATE_AUDIO" = true ]; then
@@ -484,27 +499,18 @@ else
     echo "=== 3. Generating TTS Audio SKIPPED ==="
 fi
 
-if [ "$CRAWLING_TITLE" = true ]; then
-    echo ""
-    echo "=== 4. Crawling Titles ==="
-    node craw/crawl_title.js --url "$TITLE_URL" --story "$STORY" --selector "$CRAW_TITLE_SELECTOR"
-else
-    echo ""
-    echo "=== 4. Crawling Titles SKIPPED ==="
-fi
-
 if [ "$GENERATE_VIDEO" = true ]; then
     echo ""
-    echo "=== 5. Making Video ==="
+    echo "=== 4. Making Video ==="
     caffeinate -i uv run python tts/make_video_ver4.py "$STORY" "$START" "$END" "$ADD_EPISODE_LABEL"
 else
     echo ""
-    echo "=== 5. Making Video SKIPPED ==="
+    echo "=== 4. Making Video SKIPPED ==="
 fi
 
 if [ "$UPLOAD_YOUTUBE" = true ]; then
     echo ""
-    echo "=== 6. Uploading YouTube ==="
+    echo "=== 5. Uploading YouTube ==="
     if [ ! -f "$THUMBNAIL_PATH" ]; then
         echo "ERROR: Thumbnail not found: $THUMBNAIL_PATH"
         exit 1
@@ -512,7 +518,7 @@ if [ "$UPLOAD_YOUTUBE" = true ]; then
     caffeinate -i uv run python upload/upload_youtube_ver1.py --story "$STORY" --thumbnail "$THUMBNAIL_PATH" --label-position "$REVIEW_LABEL_POSITION"
 else
     echo ""
-    echo "=== 6. Uploading YouTube SKIPPED ==="
+    echo "=== 5. Uploading YouTube SKIPPED ==="
 fi
 
 echo ""
