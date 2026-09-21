@@ -23,6 +23,7 @@ Chi tiết tham số: [run_interact_with_user.vi.md](./run_interact_with_user.vi
 ### Bước 2: Tạo ảnh bìa (Thumbnail / Cover)
 1. Sử dụng **ChatGPT** hoặc **Gemini** để tạo ảnh minh họa phù hợp với cốt truyện.
    * **Prompt gợi ý:**
+     > *"Gợi ý mình thiết kế thumbnail video youtube truyện [DÁN_LINK_TRUYỆN]."*
      > *"Mình đang muốn tạo 1 ảnh làm avatar/thumbnail cho video audio truyện: [DÁN_LINK_TRUYỆN]. Hãy ghi thêm vào trong ảnh 1 câu ngắn thu hút người xem nhé."*
      > *"Mình đang muốn tạo 1 câu hook thu hút người xem nhất để đặt làm tile cho video audio truyện này. Hãy gợi ý cho mình câu hook sao cho >=70 ký tự và <=79 ký tự nhé.>."*
      > *"Mình đang muốn tạo description để làm mô tả cho video audio truyện này. Hãy gợi ý cho mình đoạn mô tả hấp dẫn nhất nhé.>."*
