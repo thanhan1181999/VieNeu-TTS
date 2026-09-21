@@ -570,14 +570,19 @@ def build_description(
     author,
     genre,
     hash_tag,
+    playlist_id
 ):
     """
     Tạo description hoàn chỉnh cho YouTube.
     """
 
-    return f"""🎧 {description_story_name}
+    return f"""📌 Xem trọn bộ danh sách phát tại đây:
+👉 https://www.youtube.com/playlist?list={playlist_id}
+🔔 Đừng quên Đăng ký kênh (Subcribe) và bật chuông thông báo để không bỏ lỡ video mới nhất nhé!
 
-🔥 **NỘI DUNG TẬP NÀY:**
+🎧 {description_story_name}
+
+🔥 **NỘI DUNG:**
 {story_description}
 ---
 
@@ -816,6 +821,7 @@ def main():
         author,
         genre,
         hash_tag,
+        playlist_id
     )
 
     print()
