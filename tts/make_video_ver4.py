@@ -15,8 +15,8 @@ VIDEO_FPS = 1
 AUDIO_BITRATE = "128k"
 THUMBNAIL_PATH = "thumbnail.jpeg"
 
-# Giới hạn độ dài mỗi video: 11 giờ 30 phút = 41400 giây
-MAX_DURATION_SECONDS = (11 * 3600) + (30 * 60) 
+# Giới hạn độ dài mỗi video: 12 giờ
+MAX_DURATION_SECONDS = 12 * 3600
 
 
 def get_wav_metadata(file_path):
@@ -348,7 +348,7 @@ def main():
         parts.append(current_part)
 
     print(f"\nTotal audio duration: {sum(c['duration'] for c in chapters) / 3600:.2f} hours")
-    print(f"Split into {len(parts)} video part(s) (limit <= 11h 30m each).")
+    print(f"Split into {len(parts)} video part(s) (limit <= 12h each).")
 
     # Image input configuration
     if cover_file.exists():
