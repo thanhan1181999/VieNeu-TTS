@@ -89,7 +89,7 @@ uv run python tts/make_audio.py stories/truyen-001 --force
 
 ```bash
 uv run python tts/make_audio.py stories/truyen-001 \
-  --mode v3turbo --max-chars 512 --batch-size 16 --steps 8 \
+  --mode v3turbo --max-chars 256 --batch-size 16 --steps 8 \
   --start 102 --end 102
 ```
 

@@ -152,6 +152,7 @@ def generate_segment_fast(
         )
         wavs = tts._infer_chunks(chunks, speaker_emb, ref_codes, True, max(1, int(batch_size)), sampling)
         combined_audio = join_audio_chunks(wavs, tts.sample_rate, silence_ps=gaps_to_silence(gaps))
+        del wavs
         if hasattr(tts, "_apply_watermark"):
             combined_audio = tts._apply_watermark(combined_audio)
     else:
@@ -233,7 +234,7 @@ def generate_story(
         device="cpu",
         backend="onnx",
         precision="int8",
-        threads=8,
+        threads=4,
         max_batch_size=max(batch_size, 1),
     )
 
@@ -292,10 +293,11 @@ def generate_story(
             if audio is None or len(audio) == 0:
                 raise RuntimeError("No audio generated")
 
+            duration = len(audio) / tts.sample_rate
             io_pool.submit(tts.save, audio, audio_path)
+            del audio
 
             elapsed = time.perf_counter() - segment_start
-            duration = len(audio) / tts.sample_rate
             total_chunks += chunk_count
             total_infer_time += infer_time
             generated += 1
